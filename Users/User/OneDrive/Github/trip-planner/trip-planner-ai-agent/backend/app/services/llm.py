@@ -1,0 +1,138 @@
+from __future__ import annotations
+
+import json
+import os
+from typing import Any, Dict, Optional
+
+from openai import OpenAI
+
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+
+_client: Optional[OpenAI] = None
+
+
+def _get_client() -> OpenAI:
+    global _client
+    if _client is not None:
+        return _client
+    if not OPENAI_API_KEY:
+        raise RuntimeError("OPENAI_API_KEY is not set. Add it to backend/.env before starting the server.")
+    _client = OpenAI(api_key=OPENAI_API_KEY)
+    return _client
+
+
+def _responses_text(*, instructions: str, user_input: str, max_output_tokens: int = 2000) -> str:
+    client = _get_client()
+    _MODELS_NO_TEMP = ("o1", "o3", "o4", "gpt-5")
+    supports_temp = not any(OPENAI_MODEL.startswith(m) for m in _MODELS_NO_TEMP)
+    kwargs: Dict[str, Any] = dict(
+        model=OPENAI_MODEL,
+        instructions=instructions,
+        input=user_input,
+        max_output_tokens=max_output_tokens,
+    )
+    if supports_temp:
+        kwargs["temperature"] = 0.5
+    resp = client.responses.create(**kwargs)
+    return (resp.output_text or "").strip()
+
+
+def generate_trip_plan(preferences: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Generate a full trip plan from user preferences.
+    Returns a structured dict with hotels, activities, itinerary, budget breakdown, and tips.
+    """
+    destination = preferences.get("destination", "")
+    start_date = preferences.get("start_date", "")
+    end_date = preferences.get("end_date", "")
+    budget = preferences.get("budget", 0)
+    currency = preferences.get("currency", "USD")
+    budget_priorities = preferences.get("budget_priorities", [])
+    activity_preferences = preferences.get("activity_preferences", [])
+    trip_type = preferences.get("trip_type", "solo")
+    group_size = preferences.get("group_size", 1)
+    additional_notes = preferences.get("additional_notes", "")
+
+    # Compute number of nights
+    try:
+        from datetime import date as dt
+        d1 = dt.fromisoformat(start_date)
+        d2 = dt.fromisoformat(end_date)
+        nights = max(1, (d2 - d1).days)
+    except Exception:
+        nights = 5
+
+    instructions = (
+        "You are an expert luxury and budget travel planner. "
+        "Given trip preferences, generate a comprehensive, realistic, and exciting trip plan. "
+        "Output STRICT JSON only — no markdown fences, no extra text, just the JSON object. "
+        "The JSON must match this exact schema:\n"
+        "{\n"
+        '  "overview": string,\n'
+        '  "destination_highlights": string,\n'
+        '  "hotels": [\n'
+        '    {"name": string, "type": string, "stars": number, "price_per_night": number, "location": string, "why": string, "amenities": [string]}\n'
+        "  ],\n"
+        '  "activities": [\n'
+        '    {"name": string, "category": string, "cost_per_person": number, "duration": string, "description": string, "best_time": string, "tags": [string]}\n'
+        "  ],\n"
+        '  "itinerary": [\n'
+        '    {"day": number, "date": string, "theme": string, "morning": string, "afternoon": string, "evening": string, "meals": {"breakfast": string, "lunch": string, "dinner": string}, "estimated_daily_cost": number}\n'
+        "  ],\n"
+        '  "budget_breakdown": {"hotels_total": number, "activities_total": number, "food_total": number, "transport_total": number, "shopping_misc_total": number, "grand_total": number, "within_budget": boolean, "savings_tip": string},\n'
+        '  "local_tips": [string],\n'
+        '  "best_neighborhoods": [string],\n'
+        '  "must_try_foods": [string],\n'
+        '  "weather_note": string,\n'
+        '  "currency_note": string\n'
+        "}\n"
+        f"Generate EXACTLY {nights} itinerary days (day 1 through {nights}). "
+        "Recommend 3 hotels and 8-10 activities. All prices in the user's currency. "
+        "Be specific with real place names, restaurants, and neighborhoods."
+    )
+
+    user_input = (
+        f"DESTINATION: {destination}\n"
+        f"TRAVEL DATES: {start_date} to {end_date} ({nights} nights)\n"
+        f"TOTAL BUDGET: {budget} {currency}\n"
+        f"BUDGET PRIORITIES (most important first): {', '.join(budget_priorities)}\n"
+        f"ACTIVITY PREFERENCES: {', '.join(activity_preferences)}\n"
+        f"TRIP TYPE: {trip_type}\n"
+        f"GROUP SIZE: {group_size} person(s)\n"
+        f"ADDITIONAL NOTES: {additional_notes or 'None'}\n\n"
+        "Generate a complete trip plan as JSON."
+    )
+
+    raw = _responses_text(instructions=instructions, user_input=user_input, max_output_tokens=3000)
+
+    # Strip any accidental markdown fences
+    if raw.startswith("```"):
+        raw = raw.split("```")[1]
+        if raw.startswith("json"):
+            raw = raw[4:]
+        raw = raw.strip()
+
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        # Return a minimal fallback structure
+        return {
+            "overview": raw[:500] if raw else "Could not parse trip plan.",
+            "destination_highlights": "",
+            "hotels": [],
+            "activities": [],
+            "itinerary": [],
+            "budget_breakdown": {
+                "hotels_total": 0, "activities_total": 0, "food_total": 0,
+                "transport_total": 0, "shopping_misc_total": 0,
+                "grand_total": 0, "within_budget": True, "savings_tip": ""
+            },
+            "local_tips": [],
+            "best_neighborhoods": [],
+            "must_try_foods": [],
+            "weather_note": "",
+            "currency_note": "",
+            "_parse_error": True,
+            "_raw": raw[:2000],
+        }
