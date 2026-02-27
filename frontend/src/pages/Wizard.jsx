@@ -58,7 +58,7 @@ function formatDateRange(range) {
 
 
 // ─── Search bar with Nominatim suggestions ────────────────────────────────────
-function MapSearchBar({ onSelect }) {
+function MapSearchBar({ onSelect, isDarkMode = true }) {
   const [query, setQuery]           = useState("");
   const [suggestions, setSuggestions] = useState([]);
   const [loading, setLoading]       = useState(false);
@@ -96,14 +96,21 @@ function MapSearchBar({ onSelect }) {
 
   return (
     <div style={mapStyles.searchWrap}>
-      <div style={mapStyles.searchRow}>
+      <div style={{
+        ...mapStyles.searchRow,
+        background: isDarkMode ? "rgba(255,255,255,0.07)" : "rgba(168, 207, 223, 0.15)",
+        border: isDarkMode ? "1px solid rgba(255,255,255,0.15)" : "1px solid rgba(168, 207, 223, 0.4)",
+      }}>
         <span style={mapStyles.searchIcon}>🔍</span>
         <input
           type="text"
           placeholder="Search destination…"
           value={query}
           onChange={handleChange}
-          style={mapStyles.searchInput}
+          style={{
+            ...mapStyles.searchInput,
+            color: isDarkMode ? "#fff" : "#334455",
+          }}
           autoFocus
         />
         {loading && <span style={mapStyles.searchSpinner}>⏳</span>}
@@ -116,20 +123,24 @@ function MapSearchBar({ onSelect }) {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.15 }}
-            style={mapStyles.suggestionList}
+            style={{
+              ...mapStyles.suggestionList,
+              background: isDarkMode ? "rgba(12, 12, 20, 0.96)" : "rgba(255, 249, 240, 0.98)",
+              border: isDarkMode ? "1px solid rgba(255,255,255,0.12)" : "1px solid rgba(168, 207, 223, 0.3)",
+            }}
           >
             {suggestions.map((s) => (
               <li
                 key={s.place_id}
                 style={mapStyles.suggestionItem}
-                onMouseEnter={(e) => e.currentTarget.style.background = "rgba(13,148,136,0.18)"}
+                onMouseEnter={(e) => e.currentTarget.style.background = isDarkMode ? "rgba(13,148,136,0.18)" : "rgba(168, 207, 223, 0.2)"}
                 onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
                 onClick={() => pickSuggestion(s)}
               >
                 <span style={mapStyles.suggestionIcon}>
                   {s.type === "country" ? "🌍" : s.type === "city" || s.addresstype === "city" ? "🏙️" : "📍"}
                 </span>
-                <span style={mapStyles.suggestionText}>
+                <span style={{ ...mapStyles.suggestionText, color: isDarkMode ? "rgba(255,255,255,0.88)" : "rgba(51, 68, 85, 0.8)" }}>
                   {s.display_name.split(",").slice(0, 3).join(", ")}
                 </span>
               </li>
@@ -143,7 +154,7 @@ function MapSearchBar({ onSelect }) {
 
 // ─── Continent labels [longitude, latitude] ───────────────────────────────────
 const CONTINENTS = [
-  { name: "NORTH AMERICA",  coords: [-100,  48] },
+  { name: "NORTH AMERICA",  coords: [-100,  50] },
   { name: "SOUTH AMERICA",  coords: [ -58, -13] },
   { name: "EUROPE",      coords: [  15,  48] },
   { name: "AFRICA",      coords: [  20,   13] },
@@ -151,13 +162,27 @@ const CONTINENTS = [
   { name: "AUSTRALIA",   coords: [ 133, -27] },
 ];
 
+// ─── Major Cities [latitude, longitude] ───────────────────────────────────────
+const MAJOR_CITIES = [
+  { name: "New York", coords: [40.7128, -74.0060] },
+  { name: "London", coords: [51.5074, -0.1278] },
+  { name: "Paris", coords: [48.8566, 2.3522] },
+  { name: "Tokyo", coords: [35.6762, 139.6503] },
+  { name: "Dubai", coords: [25.2048, 55.2708] },
+  { name: "Singapore", coords: [1.3521, 103.8198] },
+  { name: "Bangkok", coords: [13.7563, 100.5018] },
+  { name: "Sydney", coords: [-33.8688, 151.2093] },
+  { name: "Barcelona", coords: [41.3874, 2.1686] },
+  { name: "Rome", coords: [41.9028, 12.4964] },
+];
+
 const GEO_URL = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json";
 
 // ─── Full-screen Map Phase ────────────────────────────────────────────────────
 function MapPhase({ onConfirm }) {
   const isDarkMode = useIsDarkMode();
-  const mapBackground = isDarkMode ? "#0f111a" : "#D6B588";
-  const searchBoxBackground = isDarkMode ? "rgba(10, 10, 18, 0.82)" : "#D6B588";
+  const mapBackground = isDarkMode ? "#0f111a" : "#E8F4F8";
+  const searchBoxBackground = isDarkMode ? "rgba(10, 10, 18, 0.82)" : "#FFF9F0";
 
   const [selected, setSelected] = useState(null);
   const [position, setPosition] = useState({ coordinates: [-95, 45], zoom: 1.4 });
@@ -178,13 +203,22 @@ function MapPhase({ onConfirm }) {
   }, []);
 
   const constrainPosition = (pos) => {
-    // Constrain coordinates to world bounds: [-180, 180] for longitude, [-90, 90] for latitude
+    // Calculate viewport bounds based on zoom level to prevent showing empty space
+    // At zoom 1.4, the viewport width/height in coordinate degrees is approximately 360/1.4 and 180/1.4
+    const viewportWidthDegrees = 360 / Math.max(1, pos.zoom);
+    const viewportHeightDegrees = 180 / Math.max(1, pos.zoom);
+    
+    const minLng = -180 + viewportWidthDegrees / 2;
+    const maxLng = 180 - viewportWidthDegrees / 2;
+    const minLat = -85 + viewportHeightDegrees / 2;
+    const maxLat = 85 - viewportHeightDegrees / 2;
+    
     const constrained = {
       coordinates: [
-        Math.max(-180, Math.min(180, pos.coordinates[0])),
-        Math.max(-90, Math.min(90, pos.coordinates[1])),
+        Math.max(minLng, Math.min(maxLng, pos.coordinates[0])),
+        Math.max(minLat, Math.min(maxLat, pos.coordinates[1])),
       ],
-      zoom: Math.max(1, Math.min(12, pos.zoom)),
+      zoom: Math.max(1.8, Math.min(12, pos.zoom)),
     };
     return constrained;
   };
@@ -211,7 +245,7 @@ function MapPhase({ onConfirm }) {
           center={position.coordinates}
           zoom={position.zoom}
           onMoveEnd={handleMapMove}
-          minZoom={1}
+          minZoom={1.8}
           maxZoom={12}
         >
           <Geographies geography={GEO_URL}>
@@ -222,8 +256,8 @@ function MapPhase({ onConfirm }) {
                   geography={geo}
                   onClick={() => handleCountryClick(geo)}
                   style={{
-                    default: { fill: "#1c2132", stroke: "#2e3655", strokeWidth: 0.4, outline: "none" },
-                    hover:   { fill: "rgba(13,148,136,0.55)", stroke: "#0d9488", strokeWidth: 0.5, outline: "none", cursor: "pointer" },
+                    default: isDarkMode ? { fill: "#2a2f45", stroke: "#3e4a6e", strokeWidth: 0.4, outline: "none" } : { fill: "#A8CFDF", stroke: "#8AB5C8", strokeWidth: 0.4, outline: "none" },
+                    hover:   { fill: "rgba(13,148,136,0.65)", stroke: "#0d9488", strokeWidth: 0.6, outline: "none", cursor: "pointer" },
                     pressed: { fill: "#0d9488", outline: "none" },
                   }}
                 />
@@ -239,7 +273,7 @@ function MapPhase({ onConfirm }) {
                 style={{
                   fontFamily: '"Pixelify Sans", sans-serif',
                   fontSize: `${14 / position.zoom}px`,
-                  fill: "rgba(255,255,255,0.55)",
+                  fill: isDarkMode ? "rgba(255,255,255,0.75)" : "rgba(70,100,130,0.6)",
                   fontWeight: 900,
                   letterSpacing: "0.15em",
                   pointerEvents: "none",
@@ -262,17 +296,22 @@ function MapPhase({ onConfirm }) {
       </ComposableMap>
 
       {/* Top overlay: title + search */}
-      <div style={{ ...mapStyles.topOverlay, background: searchBoxBackground }}>
+      <div style={{ ...mapStyles.bottomOverlay }}>
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.1 }}
-          style={mapStyles.titleCard}
+          style={{
+            ...mapStyles.titleCard,
+            background: isDarkMode ? "rgba(10, 10, 18, 0.82)" : "rgba(255, 249, 240, 0.95)",
+            border: isDarkMode ? "1px solid rgba(255,255,255,0.12)" : "1px solid rgba(168, 207, 223, 0.3)",
+            boxShadow: isDarkMode ? "0 8px 40px rgba(0,0,0,0.5)" : "0 4px 16px rgba(168, 207, 223, 0.15)",
+          }}
         >
           <div style={mapStyles.appName}>✈️ Trip Planner AI</div>
-          <div style={mapStyles.heroTitle}>Where do you want to go?</div>
-          <div style={mapStyles.heroHint}>Search or click a country on the map</div>
-          <MapSearchBar onSelect={handleSearchSelect} />
+          <div style={{ ...mapStyles.heroTitle, color: isDarkMode ? "#fff" : "#334455" }}>Where do you want to go?</div>
+          <div style={{ ...mapStyles.heroHint, color: isDarkMode ? "rgba(255,255,255,0.45)" : "rgba(100,120,140,0.6)" }}>Search or click a country on the map</div>
+          <MapSearchBar onSelect={handleSearchSelect} isDarkMode={isDarkMode} />
         </motion.div>
       </div>
 
