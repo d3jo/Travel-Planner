@@ -165,15 +165,45 @@ const CONTINENTS = [
 // ─── Major Cities [latitude, longitude] ───────────────────────────────────────
 const MAJOR_CITIES = [
   { name: "New York", coords: [40.7128, -74.0060] },
+  { name: "Los Angeles", coords: [34.0522, -118.2437] },
+  { name: "Chicago", coords: [41.8781, -87.6298] },
+  { name: "Mexico City", coords: [19.4326, -99.1332] },
+  { name: "Toronto", coords: [43.6532, -79.3832] },
+  { name: "Bogotá", coords: [4.7110, -74.0721] },
+  { name: "Lima", coords: [-12.0464, -77.0428] },
+  { name: "Buenos Aires", coords: [-34.6037, -58.3816] },
+  { name: "São Paulo", coords: [-23.5505, -46.6333] },
   { name: "London", coords: [51.5074, -0.1278] },
   { name: "Paris", coords: [48.8566, 2.3522] },
-  { name: "Tokyo", coords: [35.6762, 139.6503] },
-  { name: "Dubai", coords: [25.2048, 55.2708] },
-  { name: "Singapore", coords: [1.3521, 103.8198] },
-  { name: "Bangkok", coords: [13.7563, 100.5018] },
-  { name: "Sydney", coords: [-33.8688, 151.2093] },
-  { name: "Barcelona", coords: [41.3874, 2.1686] },
+  { name: "Madrid", coords: [40.4168, -3.7038] },
   { name: "Rome", coords: [41.9028, 12.4964] },
+  { name: "Berlin", coords: [52.5200, 13.4050] },
+  { name: "Istanbul", coords: [41.0082, 28.9784] },
+  { name: "Cairo", coords: [30.0444, 31.2357] },
+  { name: "Lagos", coords: [6.5244, 3.3792] },
+  { name: "Nairobi", coords: [-1.2921, 36.8219] },
+  { name: "Cape Town", coords: [-33.9249, 18.4241] },
+  { name: "Dubai", coords: [25.2048, 55.2708] },
+  { name: "Mumbai", coords: [19.0760, 72.8777] },
+  { name: "Delhi", coords: [28.6139, 77.2090] },
+  { name: "Bangkok", coords: [13.7563, 100.5018] },
+  { name: "Singapore", coords: [1.3521, 103.8198] },
+  { name: "Tokyo", coords: [35.6762, 139.6503] },
+  { name: "Seoul", coords: [37.5665, 126.9780] },
+  { name: "Beijing", coords: [39.9042, 116.4074] },
+  { name: "Sydney", coords: [-33.8688, 151.2093] },
+  { name: "Melbourne", coords: [-37.8136, 144.9631] },
+  { name: "Auckland", coords: [-36.8509, 174.7645] },
+  { name: "Vancouver", coords: [49.2827, -123.1207] },
+  { name: "Miami", coords: [25.7617, -80.1918] },
+  { name: "Santiago", coords: [-33.4489, -70.6693] },
+  { name: "Lisbon", coords: [38.7223, -9.1393] },
+  { name: "Amsterdam", coords: [52.3676, 4.9041] },
+  { name: "Athens", coords: [37.9838, 23.7275] },
+  { name: "Johannesburg", coords: [-26.2041, 28.0473] },
+  { name: "Jakarta", coords: [-6.2088, 106.8456] },
+  { name: "Hong Kong", coords: [22.3193, 114.1694] },
+  { name: "Osaka", coords: [34.6937, 135.5023] },
 ];
 
 const GEO_URL = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json";
@@ -185,7 +215,7 @@ function MapPhase({ onConfirm }) {
   const searchBoxBackground = isDarkMode ? "rgba(10, 10, 18, 0.82)" : "#FFF9F0";
 
   const [selected, setSelected] = useState(null);
-  const [position, setPosition] = useState({ coordinates: [-95, 45], zoom: 1.4 });
+  const [position, setPosition] = useState({ coordinates: [-95, 45], zoom: 2.2 });
 
   const handleCountryClick = useCallback(async (geo) => {
     const name = geo.properties.name;
@@ -204,7 +234,7 @@ function MapPhase({ onConfirm }) {
 
   const constrainPosition = (pos) => {
     // Calculate viewport bounds based on zoom level to prevent showing empty space
-    // At zoom 1.4, the viewport width/height in coordinate degrees is approximately 360/1.4 and 180/1.4
+    // At zoom N, the viewport width/height in coordinate degrees is approximately 360/N and 180/N
     const viewportWidthDegrees = 360 / Math.max(1, pos.zoom);
     const viewportHeightDegrees = 180 / Math.max(1, pos.zoom);
     
@@ -285,6 +315,32 @@ function MapPhase({ onConfirm }) {
             </MapMarker>
           ))}
 
+
+          {/* Major city markers */}
+          {MAJOR_CITIES.map((city) => (
+            <MapMarker key={city.name} coordinates={[city.coords[1], city.coords[0]]}>
+              <title>{city.name}</title>
+              <circle r={2.6 / position.zoom} fill="#38bdf8" fillOpacity={0.92} />
+              <circle r={5.2 / position.zoom} fill="#38bdf8" fillOpacity={0.2} />
+              {position.zoom >= 2.2 && (
+                <text
+                  y={-7 / position.zoom}
+                  textAnchor="middle"
+                  style={{
+                    fontFamily: '"Pixelify Sans", sans-serif',
+                    fontSize: `${10 / position.zoom}px`,
+                    fill: isDarkMode ? "rgba(255,255,255,0.8)" : "rgba(51,68,85,0.85)",
+                    fontWeight: 700,
+                    pointerEvents: "none",
+                    userSelect: "none",
+                  }}
+                >
+                  {city.name}
+                </text>
+              )}
+            </MapMarker>
+          ))}
+
           {/* Selected location pin */}
           {selected && (
             <MapMarker coordinates={[selected.coords[1], selected.coords[0]]}>
@@ -296,7 +352,7 @@ function MapPhase({ onConfirm }) {
       </ComposableMap>
 
       {/* Top overlay: title + search */}
-      <div style={{ ...mapStyles.bottomOverlay }}>
+      <div style={{ ...mapStyles.topOverlay }}>
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
