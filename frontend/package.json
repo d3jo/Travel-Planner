@@ -9,7 +9,7 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "electron:dev": "npx concurrently \"vite\" \"npx wait-on http://localhost:5173 && npx cross-env NODE_ENV=development electron .\"",
+    "electron:dev": "cross-env VITE_PORT=5000 npx concurrently \"vite\" \"npx wait-on http://localhost:5000 && npx cross-env NODE_ENV=development electron .\"",
     "electron:build": "vite build && electron-builder"
   },
   "dependencies": {

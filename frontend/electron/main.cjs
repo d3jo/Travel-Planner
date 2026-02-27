@@ -21,7 +21,8 @@ function createWindow() {
   ipcMain.on('window-close', () => win.close());
 
   if (isDev) {
-    win.loadURL('http://localhost:5173');
+    const port = process.env.VITE_PORT || '5000';
+    win.loadURL(`http://localhost:${port}`);
   } else {
     win.loadFile(path.join(__dirname, '../dist/index.html'));
   }
