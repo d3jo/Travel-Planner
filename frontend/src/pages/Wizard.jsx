@@ -683,7 +683,6 @@ function StepDatesAndBudget({
                 selected={dateRange}
                 onSelect={(r) => {
                   setDateRange(r || { from: undefined, to: undefined });
-                  if (r?.from && r?.to) setShowCal(false);
                 }}
                 month={calMonth}
                 onMonthChange={setCalMonth}
