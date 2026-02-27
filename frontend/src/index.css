@@ -46,20 +46,20 @@ html, body {
 
 /* Light mode overrides */
 body.light {
-  --bg-app:        #D6B588;
-  --white:         #2c1500;
-  --bg-card:       rgb(196, 139, 55);
-  --bg-card-solid: rgb(196, 139, 55);
-  --border-col:    rgba(0, 0, 0, 0.2);
-  --bg-btn:        #8B5E3C;
-  --text-btn:      #D6B588;
-  --bg-input:      rgb(196, 139, 55);
-  --text-muted:    rgba(0, 0, 0, 0.45);
-  /* Calendar accent (warm amber) */
-  --cal-accent:    #C27A2A;
-  --cal-accent-bg: rgba(194, 122, 42, 0.18);
-  --cal-accent-fg: #7B3F00;
-  --cal-accent-ring: rgba(194, 122, 42, 0.25);
+  --bg-app:        #E8F4F8;
+  --white:         #334455;
+  --bg-card:       rgba(255, 249, 240, 0.95);
+  --bg-card-solid: #FFF9F0;
+  --border-col:    rgba(168, 207, 223, 0.35);
+  --bg-btn:        #0d9488;
+  --text-btn:      #ffffff;
+  --bg-input:      rgba(168, 207, 223, 0.12);
+  --text-muted:    rgba(100, 120, 140, 0.75);
+  /* Calendar accent (same as map theme) */
+  --cal-accent:    #0d9488;
+  --cal-accent-bg: rgba(13, 148, 136, 0.14);
+  --cal-accent-fg: #0f766e;
+  --cal-accent-ring: rgba(13, 148, 136, 0.2);
 
   color: var(--white);
   background-color: var(--bg-app);
