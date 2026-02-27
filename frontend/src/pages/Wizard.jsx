@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ComposableMap, Geographies, Geography, ZoomableGroup, Marker as MapMarker } from "react-simple-maps";
 import "react-day-picker/dist/style.css";
 import api from "../api";
+import { useIsDarkMode } from "../contexts/ThemeContext";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const TOTAL_STEPS = 3;
@@ -142,11 +143,11 @@ function MapSearchBar({ onSelect }) {
 
 // ─── Continent labels [longitude, latitude] ───────────────────────────────────
 const CONTINENTS = [
-  { name: "N. AMERICA",  coords: [-100,  45] },
-  { name: "S. AMERICA",  coords: [ -58, -15] },
-  { name: "EUROPE",      coords: [  15,  54] },
-  { name: "AFRICA",      coords: [  22,   2] },
-  { name: "ASIA",        coords: [  90,  50] },
+  { name: "NORTH AMERICA",  coords: [-100,  48] },
+  { name: "SOUTH AMERICA",  coords: [ -58, -13] },
+  { name: "EUROPE",      coords: [  15,  48] },
+  { name: "AFRICA",      coords: [  20,   13] },
+  { name: "ASIA",        coords: [  100,  50] },
   { name: "AUSTRALIA",   coords: [ 133, -27] },
 ];
 
@@ -154,6 +155,10 @@ const GEO_URL = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json"
 
 // ─── Full-screen Map Phase ────────────────────────────────────────────────────
 function MapPhase({ onConfirm }) {
+  const isDarkMode = useIsDarkMode();
+  const mapBackground = isDarkMode ? "#0f111a" : "#D6B588";
+  const searchBoxBackground = isDarkMode ? "rgba(10, 10, 18, 0.82)" : "#D6B588";
+
   const [selected, setSelected] = useState(null);
   const [position, setPosition] = useState({ coordinates: [-95, 45], zoom: 1.4 });
 
@@ -172,23 +177,40 @@ function MapPhase({ onConfirm }) {
     }
   }, []);
 
+  const constrainPosition = (pos) => {
+    // Constrain coordinates to world bounds: [-180, 180] for longitude, [-90, 90] for latitude
+    const constrained = {
+      coordinates: [
+        Math.max(-180, Math.min(180, pos.coordinates[0])),
+        Math.max(-90, Math.min(90, pos.coordinates[1])),
+      ],
+      zoom: Math.max(1, Math.min(12, pos.zoom)),
+    };
+    return constrained;
+  };
+
   const handleSearchSelect = useCallback(({ name, coords }) => {
     setSelected({ name, coords });
-    setPosition({ coordinates: [coords[1], coords[0]], zoom: 5 });
+    const newPos = { coordinates: [coords[1], coords[0]], zoom: 5 };
+    setPosition(constrainPosition(newPos));
   }, []);
 
+  const handleMapMove = (pos) => {
+    setPosition(constrainPosition(pos));
+  };
+
   return (
-    <div style={mapStyles.wrap}>
+    <div style={{ ...mapStyles.wrap, background: mapBackground }}>
       {/* SVG world map */}
       <ComposableMap
         projection="geoMercator"
         projectionConfig={{ scale: 145 }}
-        style={{ width: "100%", height: "100%", background: "#0f111a" }}
+        style={{ width: "100%", height: "100%", background: mapBackground }}
       >
         <ZoomableGroup
           center={position.coordinates}
           zoom={position.zoom}
-          onMoveEnd={setPosition}
+          onMoveEnd={handleMapMove}
           minZoom={1}
           maxZoom={12}
         >
@@ -216,10 +238,10 @@ function MapPhase({ onConfirm }) {
                 textAnchor="middle"
                 style={{
                   fontFamily: '"Pixelify Sans", sans-serif',
-                  fontSize: `${5 / position.zoom}px`,
-                  fill: "rgba(255,255,255,0.22)",
-                  fontWeight: 700,
-                  letterSpacing: "0.1em",
+                  fontSize: `${14 / position.zoom}px`,
+                  fill: "rgba(255,255,255,0.55)",
+                  fontWeight: 900,
+                  letterSpacing: "0.15em",
                   pointerEvents: "none",
                   userSelect: "none",
                 }}
@@ -240,7 +262,7 @@ function MapPhase({ onConfirm }) {
       </ComposableMap>
 
       {/* Top overlay: title + search */}
-      <div style={mapStyles.topOverlay}>
+      <div style={{ ...mapStyles.topOverlay, background: searchBoxBackground }}>
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}

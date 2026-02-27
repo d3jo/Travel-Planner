@@ -46,14 +46,14 @@ html, body {
 
 /* Light mode overrides */
 body.light {
-  --bg-app:        #D2B48C;
+  --bg-app:        #D6B588;
   --white:         #2c1500;
-  --bg-card:       rgba(255, 255, 255, 0.4);
-  --bg-card-solid: rgba(255, 255, 255, 0.55);
+  --bg-card:       rgb(196, 139, 55);
+  --bg-card-solid: rgb(196, 139, 55);
   --border-col:    rgba(0, 0, 0, 0.2);
   --bg-btn:        #8B5E3C;
-  --text-btn:      #ffffff;
-  --bg-input:      rgba(255, 255, 255, 0.55);
+  --text-btn:      #D6B588;
+  --bg-input:      rgb(196, 139, 55);
   --text-muted:    rgba(0, 0, 0, 0.45);
   /* Calendar accent (warm amber) */
   --cal-accent:    #C27A2A;

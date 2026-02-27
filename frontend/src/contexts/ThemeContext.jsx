@@ -17,3 +17,8 @@ export function ThemeProvider({ children }) {
 }
 
 export const useTheme = () => useContext(ThemeContext);
+
+export const useIsDarkMode = () => {
+  const { isDark } = useContext(ThemeContext);
+  return isDark;
+};
