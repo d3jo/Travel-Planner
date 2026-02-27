@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { DayPicker } from "react-day-picker";
 import { AnimatePresence, motion } from "framer-motion";
@@ -447,6 +447,7 @@ export default function Wizard() {
   const [step, setStep]             = useState(0);
   const [direction, setDirection]   = useState(1);
   const prevStepRef                 = useRef(0);
+  const wrapRef                     = useRef(null);
 
   const [dateRange, setDateRange]   = useState({ from: undefined, to: undefined });
   const [showCal, setShowCal]       = useState(false);
@@ -512,6 +513,14 @@ export default function Wizard() {
     exit:   (d) => ({ x: d * -60, opacity: 0 }),
   };
 
+  useEffect(() => {
+    if (step === 0 && showCal) {
+      requestAnimationFrame(() => {
+        wrapRef.current?.scrollTo({ top: wrapRef.current.scrollHeight, behavior: "smooth" });
+      });
+    }
+  }, [showCal, step]);
+
   // ── Phase 1: Map ────────────────────────────────────────────────────────────
   if (!mapDone) {
     return (
@@ -536,6 +545,7 @@ export default function Wizard() {
       initial={{ opacity: 0, y: 30 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.45, ease: "easeOut" }}
+      ref={wrapRef}
       style={styles.wrap}
     >
       <div style={styles.content}>
@@ -562,6 +572,7 @@ export default function Wizard() {
               animate="center"
               exit="exit"
               transition={{ duration: 0.28, ease: "easeInOut" }}
+              layout
               style={styles.card}
             >
               {step === 0 && (
@@ -1009,7 +1020,7 @@ const styles = {
   subtitle: { fontSize: "0.9rem", color: "var(--text-muted)", marginTop: 4 },
   dots: { display: "flex", gap: 6, alignItems: "center", justifyContent: "center" },
   dot:  { height: 8, borderRadius: 4, transition: "all 0.3s ease" },
-  cardWrap: { width: "100%", overflow: "hidden" },
+  cardWrap: { width: "100%", overflow: "visible" },
   card: {
     background: "var(--bg-card)",
     border: "1px solid var(--border-col)",
