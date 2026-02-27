@@ -163,6 +163,15 @@ body {
   justify-content: center;
   margin: auto;
   border-radius: 50%;
+  cursor: grab;
+  transition: transform 0.12s ease, background-color 0.14s ease, box-shadow 0.14s ease;
+}
+.calendar-picker .rdp-day_button:hover {
+  transform: translateY(-1px);
+}
+.calendar-picker .rdp-day_button:active {
+  cursor: grabbing;
+  transform: scale(0.93);
 }
 
 /* Stronger contrast: dim days outside the current month more */
@@ -170,6 +179,22 @@ body {
   --rdp-outside-opacity: 0.28;
   --rdp-accent-color: var(--cal-accent);
   --rdp-accent-background-color: var(--cal-accent-ring);
+  --rdp-range_middle-background-color: rgba(13, 148, 136, 0.2);
+  --rdp-range_middle-color: var(--white);
+}
+
+.calendar-picker .rdp-range_start .rdp-day_button,
+.calendar-picker .rdp-range_end .rdp-day_button {
+  box-shadow: 0 0 0 2px var(--cal-accent-ring);
+}
+.calendar-picker .rdp-range_middle .rdp-day_button {
+  animation: rdp-drag-glow 0.55s ease-in-out;
+}
+
+@keyframes rdp-drag-glow {
+  0% { transform: scale(0.92); }
+  60% { transform: scale(1.03); }
+  100% { transform: scale(1); }
 }
 
 /* Circle today's date */
