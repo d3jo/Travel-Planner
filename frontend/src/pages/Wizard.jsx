@@ -503,7 +503,14 @@ export default function Wizard() {
       const res = await api.post("/plan", payload);
       nav("/plan", { state: { plan: res.data, preferences: payload } });
     } catch (e) {
-      setErr(e?.response?.data?.detail || e?.message || "Failed to generate trip plan.");
+      const detail = e?.response?.data?.detail;
+      if (detail) {
+        setErr(detail);
+      } else if (e?.code === "ERR_NETWORK") {
+        setErr("Cannot reach the API server. Make sure backend is running and VITE_API_BASE_URL points to it.");
+      } else {
+        setErr(e?.message || "Failed to generate trip plan.");
+      }
     } finally { setLoading(false); }
   };
 
