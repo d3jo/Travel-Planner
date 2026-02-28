@@ -32,8 +32,9 @@ pip install -r requirements.txt
 # Add your OpenAI API key to .env
 # Edit backend/.env and replace: OPENAI_API_KEY=your_openai_api_key_here
 
-# Optional: allow custom frontend origins (comma-separated)
+# Optional CORS overrides
 # CORS_ALLOW_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
+# CORS_ALLOW_ORIGIN_REGEX=^https?://.+$
 
 # Start the server
 uvicorn app.main:app --reload
