@@ -28,8 +28,13 @@ source .venv/bin/activate
 # Install dependencies
 pip install -r requirements.txt
 
+
 # Add your OpenAI API key to .env
 # Edit backend/.env and replace: OPENAI_API_KEY=your_openai_api_key_here
+
+# Optional CORS overrides
+# CORS_ALLOW_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
+# CORS_ALLOW_ORIGIN_REGEX=^https?://.+$
 
 # Start the server
 uvicorn app.main:app --reload
@@ -43,6 +48,9 @@ cd frontend
 
 # Install dependencies (skip if node_modules already exists)
 npm install
+
+# Optional: point frontend to a custom backend URL
+# Create frontend/.env.local with: VITE_API_BASE_URL=http://127.0.0.1:8000
 
 # Start dev server
 npm run dev
