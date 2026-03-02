@@ -46,20 +46,20 @@ html, body {
 
 /* Light mode overrides */
 body.light {
-  --bg-app:        #D6B588;
-  --white:         #2c1500;
-  --bg-card:       rgb(196, 139, 55);
-  --bg-card-solid: rgb(196, 139, 55);
-  --border-col:    rgba(0, 0, 0, 0.2);
-  --bg-btn:        #8B5E3C;
-  --text-btn:      #D6B588;
-  --bg-input:      rgb(196, 139, 55);
-  --text-muted:    rgba(0, 0, 0, 0.45);
-  /* Calendar accent (warm amber) */
-  --cal-accent:    #C27A2A;
-  --cal-accent-bg: rgba(194, 122, 42, 0.18);
-  --cal-accent-fg: #7B3F00;
-  --cal-accent-ring: rgba(194, 122, 42, 0.25);
+  --bg-app:        #E8F4F8;
+  --white:         #334455;
+  --bg-card:       rgba(255, 249, 240, 0.95);
+  --bg-card-solid: #FFF9F0;
+  --border-col:    rgba(168, 207, 223, 0.35);
+  --bg-btn:        #0d9488;
+  --text-btn:      #ffffff;
+  --bg-input:      rgba(168, 207, 223, 0.12);
+  --text-muted:    rgba(100, 120, 140, 0.75);
+  /* Calendar accent (same as map theme) */
+  --cal-accent:    #0d9488;
+  --cal-accent-bg: rgba(13, 148, 136, 0.14);
+  --cal-accent-fg: #0f766e;
+  --cal-accent-ring: rgba(13, 148, 136, 0.2);
 
   color: var(--white);
   background-color: var(--bg-app);
@@ -163,6 +163,15 @@ body {
   justify-content: center;
   margin: auto;
   border-radius: 50%;
+  cursor: grab;
+  transition: transform 0.12s ease, background-color 0.14s ease, box-shadow 0.14s ease;
+}
+.calendar-picker .rdp-day_button:hover {
+  transform: translateY(-1px);
+}
+.calendar-picker .rdp-day_button:active {
+  cursor: grabbing;
+  transform: scale(0.93);
 }
 
 /* Stronger contrast: dim days outside the current month more */
@@ -170,6 +179,22 @@ body {
   --rdp-outside-opacity: 0.28;
   --rdp-accent-color: var(--cal-accent);
   --rdp-accent-background-color: var(--cal-accent-ring);
+  --rdp-range_middle-background-color: rgba(13, 148, 136, 0.2);
+  --rdp-range_middle-color: var(--white);
+}
+
+.calendar-picker .rdp-range_start .rdp-day_button,
+.calendar-picker .rdp-range_end .rdp-day_button {
+  box-shadow: 0 0 0 2px var(--cal-accent-ring);
+}
+.calendar-picker .rdp-range_middle .rdp-day_button {
+  animation: rdp-drag-glow 0.55s ease-in-out;
+}
+
+@keyframes rdp-drag-glow {
+  0% { transform: scale(0.92); }
+  60% { transform: scale(1.03); }
+  100% { transform: scale(1); }
 }
 
 /* Circle today's date */
