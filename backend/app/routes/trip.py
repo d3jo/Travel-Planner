@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from app.services.llm import generate_trip_plan
+from app.services import llm
 
 router = APIRouter()
 
@@ -22,6 +22,12 @@ class TripPreferences(BaseModel):
     trip_type: str = "solo"
     group_size: int = 1
     additional_notes: Optional[str] = None
+
+
+class CityRecommendationsRequest(BaseModel):
+    country: str
+    limit: int = 5
+
 
 
 @router.post("/plan")
@@ -41,9 +47,25 @@ async def create_trip_plan(prefs: TripPreferences) -> Dict[str, Any]:
         raise HTTPException(status_code=400, detail="Budget must be greater than 0.")
 
     try:
-        plan = generate_trip_plan(prefs.model_dump())
+        plan = llm.generate_trip_plan(prefs.model_dump())
         return plan
     except RuntimeError as e:
         raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to generate trip plan: {str(e)}")
+
+
+
+@router.post("/recommend-cities")
+async def recommend_cities(payload: CityRecommendationsRequest) -> Dict[str, Any]:
+    if not payload.country.strip():
+        raise HTTPException(status_code=400, detail="Country is required.")
+
+    try:
+        if not hasattr(llm, "generate_city_recommendations"):
+            raise RuntimeError("City recommendation feature is unavailable. Please update backend/app/services/llm.py and restart the server.")
+        return llm.generate_city_recommendations(payload.country.strip(), payload.limit)
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate city recommendations: {str(e)}")

@@ -136,3 +136,55 @@ def generate_trip_plan(preferences: Dict[str, Any]) -> Dict[str, Any]:
             "_parse_error": True,
             "_raw": raw[:2000],
         }
+
+
+
+
+def generate_city_recommendations(country: str, limit: int = 5) -> Dict[str, Any]:
+    """Generate top city recommendations for a selected country."""
+    limit = max(1, min(int(limit or 5), 10))
+
+    instructions = (
+        "You are an expert travel recommender. "
+        "Recommend top cities for tourism in the given country. "
+        "Output STRICT JSON only with this schema: "
+        "{\"country\": string, \"cities\": [{\"name\": string, \"lat\": number, \"lon\": number, \"style_fit\": string, \"description\": string}]}. "
+        "Return exactly the number of cities requested with unique city names. "
+        "Use real cities and realistic latitude/longitude values. "
+        "Keep style_fit and description concise (1 sentence each)."
+    )
+    user_input = (
+        f"COUNTRY: {country}\n"
+        f"CITY_COUNT: {limit}\n"
+        "Generate recommendations now."
+    )
+
+    raw = _responses_text(instructions=instructions, user_input=user_input, max_output_tokens=1200)
+
+    if raw.startswith("```"):
+        raw = raw.split("```")[1]
+        if raw.startswith("json"):
+            raw = raw[4:]
+        raw = raw.strip()
+
+    try:
+        data = json.loads(raw)
+        cities = data.get("cities") if isinstance(data, dict) else []
+        cleaned = []
+        for item in (cities or []):
+            name = str(item.get("name", "")).strip()
+            if not name:
+                continue
+            cleaned.append({
+                "name": name,
+                "lat": float(item.get("lat", 0)),
+                "lon": float(item.get("lon", 0)),
+                "style_fit": str(item.get("style_fit", "Great for many traveler styles.")).strip(),
+                "description": str(item.get("description", "A popular city with memorable travel experiences.")).strip(),
+            })
+            if len(cleaned) >= limit:
+                break
+
+        return {"country": country, "cities": cleaned}
+    except Exception:
+        return {"country": country, "cities": []}

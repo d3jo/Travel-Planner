@@ -43,6 +43,34 @@ const TRIP_TYPES = [
 
 const CURRENCIES = ["USD", "EUR","CAD", "JPY", "KRW"];
 
+
+
+
+const EMPTY_RECOMMENDATIONS = [];
+
+function normalizeCountryName(name = "") {
+  const cleaned = name.trim();
+  const aliases = {
+    "United States": "United States of America",
+    USA: "United States of America",
+    "U.S.A.": "United States of America",
+  };
+  return aliases[cleaned] || cleaned;
+}
+
+function cityPhotoUrls(cityName, countryName) {
+  const query = encodeURIComponent(`${cityName} ${countryName} travel`);
+  return [
+    `https://source.unsplash.com/640x420/?${query}&sig=1`,
+    `https://source.unsplash.com/640x420/?${query}&sig=2`,
+  ];
+}
+
+
+
+
+
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function pad2(n) { return String(n).padStart(2, "0"); }
 function toYYYYMMDD(d) {
@@ -80,11 +108,15 @@ function MapSearchBar({ onSelect, isDarkMode = true }) {
   }, []);
 
   const pickSuggestion = (item) => {
+    const isCountry = item.type === "country" || item.addresstype === "country";
+    const primary = item.display_name.split(",").slice(0, 2).join(",").trim();
     onSelect({
-      name: item.display_name.split(",").slice(0, 2).join(",").trim(),
+      name: primary,
       coords: [parseFloat(item.lat), parseFloat(item.lon)],
+      type: isCountry ? "country" : "city",
+      countryName: isCountry ? item.display_name.split(",")[0].trim() : item.address?.country,
     });
-    setQuery(item.display_name.split(",").slice(0, 2).join(",").trim());
+    setQuery(primary);
     setSuggestions([]);
   };
 
@@ -185,6 +217,13 @@ const MAJOR_CITIES = [
   { name: "Jakarta",      coords: [-6.2088, 106.8456] },
   { name: "Hong Kong",    coords: [22.3193, 114.1694] },
   { name: "Osaka",        coords: [34.6937, 135.5023] },
+  { name: "Moscow",       coords: [55.7558, 37.6173] },
+  { name: "Tehran",       coords: [35.6892, 51.3890] },
+  { name: "Riyadh",       coords: [24.7136, 46.6753] },
+  { name: "Tel Aviv",     coords: [32.0853, 34.7818] },
+  { name: "Baku",         coords: [40.4093, 49.8671] },
+  { name: "Tashkent",     coords: [41.2995, 69.2401] },
+  { name: "Almaty",       coords: [43.2389, 76.8897] },
 ];
 
 const GEO_URL = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json";
@@ -195,7 +234,12 @@ function MapPhase({ onConfirm }) {
   const mapBg = isDarkMode ? "#0f111a" : "#E8F4F8";
 
   const [selected, setSelected] = useState(null);
-  const [position, setPosition] = useState({ coordinates: [-95, 45], zoom: 2.2 });
+  const [showRecommendations, setShowRecommendations] = useState(false);
+  const [focusedRecommendation, setFocusedRecommendation] = useState(null);
+  const [recommendationCountry, setRecommendationCountry] = useState(null);
+  const [cityRecommendations, setCityRecommendations] = useState(EMPTY_RECOMMENDATIONS);
+  const [recommendationLoading, setRecommendationLoading] = useState(false);
+  const [recommendationError, setRecommendationError] = useState("");
 
   const constrain = (pos) => {
     const vw = 360 / Math.max(1, pos.zoom);
@@ -217,14 +261,64 @@ function MapPhase({ onConfirm }) {
         { headers: { "Accept-Language": "en" } }
       );
       const data = await res.json();
-      setSelected({ name, coords: data[0] ? [parseFloat(data[0].lat), parseFloat(data[0].lon)] : [0, 0] });
-    } catch { setSelected({ name, coords: [0, 0] }); }
+      setSelected({ name, coords: data[0] ? [parseFloat(data[0].lat), parseFloat(data[0].lon)] : [0, 0], type: "country", countryName: name });
+      setRecommendationCountry(normalizeCountryName(name));
+      setShowRecommendations(false);
+      setFocusedRecommendation(null);
+      setCityRecommendations([]);
+      setRecommendationError("");
+    } catch {
+      setSelected({ name, coords: [0, 0], type: "country", countryName: name });
+      setRecommendationCountry(normalizeCountryName(name));
+      setShowRecommendations(false);
+      setFocusedRecommendation(null);
+      setCityRecommendations([]);
+      setRecommendationError("");
+    }
   }, []);
 
-  const handleSearchSelect = useCallback(({ name, coords }) => {
-    setSelected({ name, coords });
+  const handleSearchSelect = useCallback(({ name, coords, type, countryName }) => {
+    setSelected({ name, coords, type, countryName });
+    setRecommendationCountry(type === "country" ? normalizeCountryName(countryName || "") : null);
+    setShowRecommendations(false);
+    setFocusedRecommendation(null);
+    setCityRecommendations([]);
+    setRecommendationError("");
     setPosition(constrain({ coordinates: [coords[1], coords[0]], zoom: 5 }));
   }, []);
+
+
+
+  const fetchRecommendations = useCallback(async (countryName) => {
+    if (!countryName) return;
+    setRecommendationLoading(true);
+    setRecommendationError("");
+    setFocusedRecommendation(null);
+    try {
+      const response = await api.post("/recommend-cities", { country: countryName, limit: 5 });
+      const items = Array.isArray(response?.data?.cities) ? response.data.cities : [];
+      const normalized = items.slice(0, 5).map((city) => ({
+        name: city.name,
+        coords: [Number(city.lat) || 0, Number(city.lon) || 0],
+        style: city.style_fit || "Great for diverse travel styles.",
+        description: city.description || "A memorable destination with standout local experiences.",
+        photos: cityPhotoUrls(city.name, countryName),
+      }));
+      setCityRecommendations(normalized);
+      if (!normalized.length) {
+        setRecommendationError("No recommendations were returned for this country yet.");
+      }
+    } catch (error) {
+      setCityRecommendations([]);
+      setRecommendationError(error?.response?.data?.detail || "Could not generate recommendations right now.");
+    } finally {
+      setRecommendationLoading(false);
+    }
+  }, []);
+
+
+
+
 
   const handleZoom = (delta) =>
     setPosition((prev) => constrain({ ...prev, zoom: prev.zoom + delta }));
@@ -339,8 +433,69 @@ function MapPhase({ onConfirm }) {
             <div style={mapStyles.selectedChip}>
               <span>📍</span>
               <span style={mapStyles.selectedName}>{selected.name}</span>
-              <button type="button" style={mapStyles.clearBtn} onClick={() => setSelected(null)}>✕</button>
+              <button type="button" style={mapStyles.clearBtn} onClick={() => {
+                setSelected(null);
+                setShowRecommendations(false);
+                setFocusedRecommendation(null);
+                setRecommendationCountry(null);
+                setCityRecommendations([]);
+                setRecommendationError("");
+              }}>✕</button>
             </div>
+            {selected.type === "country" && (
+              <button
+                type="button"
+                onClick={async () => {
+                  if (showRecommendations) {
+                    setShowRecommendations(false);
+                    return;
+                  }
+                  setShowRecommendations(true);
+                  await fetchRecommendations(recommendationCountry);
+                }}
+                style={mapStyles.recommendBtn}
+                disabled={recommendationLoading}
+              >
+                {recommendationLoading ? "Generating city recommendations..." : showRecommendations ? "Hide city recommendations" : "Recommend a city"}
+              </button>
+            )}
+            {showRecommendations && (
+              <div style={mapStyles.recommendPanel}>
+                <div style={mapStyles.recommendTitle}>Top 5 cities in {recommendationCountry}</div>
+                {recommendationError && <div style={mapStyles.recommendError}>{recommendationError}</div>}
+                {!recommendationError && cityRecommendations.length === 0 && !recommendationLoading && (
+                  <div style={mapStyles.recommendHint}>No recommendations available.</div>
+                )}
+                <div style={mapStyles.recommendList}>
+                  {cityRecommendations.map((city) => (
+                    <button
+                      key={city.name}
+                      type="button"
+                      onClick={() => {
+                        setFocusedRecommendation(city);
+                        setSelected({ name: city.name, coords: city.coords, type: "city", countryName: recommendationCountry });
+                        setPosition(constrain({ coordinates: [city.coords[1], city.coords[0]], zoom: 4.8 }));
+                      }}
+                      style={mapStyles.recommendCityBtn}
+                    >
+                      {city.name}
+                    </button>
+                  ))}
+                </div>
+                {focusedRecommendation && (
+                  <div style={mapStyles.cityInfoCard}>
+                    <div style={mapStyles.cityInfoHeader}>{focusedRecommendation.name}</div>
+                    <div style={mapStyles.cityInfoStyle}>{focusedRecommendation.style}</div>
+                    <div style={mapStyles.cityInfoDesc}>{focusedRecommendation.description}</div>
+                    <div style={mapStyles.cityPhotoGrid}>
+                      {focusedRecommendation.photos.map((src, idx) => (
+                        <img key={`${focusedRecommendation.name}-${idx}`} src={src} alt={`${focusedRecommendation.name} view ${idx + 1}`} style={mapStyles.cityPhoto} />
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
             <motion.button type="button" whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.97 }}
               style={mapStyles.ctaBtn} onClick={() => onConfirm(selected)}
             >Plan this trip →</motion.button>
@@ -702,13 +857,17 @@ function StepPreferences({ budgetPriorities, togglePriority, activityPrefs, togg
 }
 
 function StepTripDetails({ tripType, setTripType, groupSize, setGroupSize, notes, setNotes }) {
+    const handleTripTypeSelect = (nextTripType) => {
+    setTripType(nextTripType);
+    setGroupSize(nextTripType === "solo" ? 1 : 2);
+  };
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14, paddingBottom: 6 }}>
       <div style={styles.stepLabel}>Step 3 of 3</div>
       <div style={styles.stepTitle}>Trip type</div>
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
         {TRIP_TYPES.map((tt) => (
-          <Tag key={tt.id} label={tt.label} selected={tripType === tt.id} onClick={() => setTripType(tt.id)} />
+          <Tag key={tt.id} label={tt.label} selected={tripType === tt.id} onClick={() => handleTripTypeSelect(tt.id)} />
         ))}
       </div>
       <div style={styles.stepTitle}>Number of travelers</div>
@@ -804,6 +963,31 @@ const mapStyles = {
     fontFamily: '"Pixelify Sans", sans-serif', cursor: "pointer",
     pointerEvents: "all", boxShadow: "0 4px 24px rgba(13,148,136,0.5)", letterSpacing: "0.02em",
   },
+  recommendBtn: {
+    padding: "10px 20px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.2)",
+    background: "rgba(10,10,18,0.85)", color: "#fff", cursor: "pointer", pointerEvents: "all",
+    fontSize: "0.9rem", fontWeight: 700,
+  },
+  recommendPanel: {
+    width: "min(760px, 92vw)", background: "rgba(10,10,18,0.88)", border: "1px solid rgba(255,255,255,0.16)",
+    borderRadius: 14, padding: 14, pointerEvents: "all", color: "#fff", display: "flex", flexDirection: "column", gap: 10,
+  },
+  recommendTitle: { fontSize: "0.95rem", fontWeight: 700 },
+  recommendError: { color: "#fda4af", fontSize: "0.84rem" },
+  recommendHint: { color: "rgba(255,255,255,0.75)", fontSize: "0.84rem" },
+  recommendList: { display: "flex", flexWrap: "wrap", gap: 8 },
+  recommendCityBtn: {
+    background: "rgba(13,148,136,0.2)", color: "#fff", border: "1px solid rgba(13,148,136,0.5)",
+    padding: "8px 12px", borderRadius: 999, cursor: "pointer", fontWeight: 600,
+  },
+  cityInfoCard: {
+    borderTop: "1px solid rgba(255,255,255,0.12)", paddingTop: 10, display: "flex", flexDirection: "column", gap: 6,
+  },
+  cityInfoHeader: { fontFamily: '"Pixelify Sans", sans-serif', fontSize: "1.2rem", fontWeight: 700 },
+  cityInfoStyle: { color: "#7ee7d6", fontSize: "0.9rem" },
+  cityInfoDesc: { color: "rgba(255,255,255,0.86)", fontSize: "0.86rem", lineHeight: 1.4 },
+  cityPhotoGrid: { display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 },
+  cityPhoto: { width: "100%", height: 120, objectFit: "cover", borderRadius: 8 },
 };
 
 const styles = {
@@ -817,7 +1001,7 @@ const styles = {
 },
 content: {
   display: "flex", flexDirection: "column", alignItems: "center",
-  width: "100%", maxWidth: 860, maxHeight: "200vh",
+  width: "100%", maxWidth: 860,
   gap: 12,
   minHeight: 0,              // remove height: "100%"
 },
