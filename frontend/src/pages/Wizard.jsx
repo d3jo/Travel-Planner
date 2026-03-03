@@ -234,6 +234,7 @@ function MapPhase({ onConfirm }) {
   const mapBg = isDarkMode ? "#0f111a" : "#E8F4F8";
 
   const [selected, setSelected] = useState(null);
+  const [position, setPosition] = useState({ coordinates: [0, 20], zoom: 1.8 });
   const [showRecommendations, setShowRecommendations] = useState(false);
   const [focusedRecommendation, setFocusedRecommendation] = useState(null);
   const [recommendationCountry, setRecommendationCountry] = useState(null);
