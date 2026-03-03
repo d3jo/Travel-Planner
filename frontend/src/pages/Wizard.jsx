@@ -616,7 +616,7 @@ export default function Wizard() {
   const [calMonth, setCalMonth]   = useState(() => { const d = new Date(); d.setDate(1); return d; });
 
   const [budget, setBudget]       = useState("");
-  const [currency, setCurrency]   = useState("USD");
+  const [currency, setCurrency]   = useState("CAD");
   const [budgetPriorities, setBudgetPriorities] = useState([]);
   const [activityPrefs, setActivityPrefs]       = useState([]);
   const [tripType, setTripType]   = useState("solo");
