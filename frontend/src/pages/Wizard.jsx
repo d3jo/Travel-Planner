@@ -41,7 +41,7 @@ const TRIP_TYPES = [
   { id: "family",  label: "👨‍👩‍👧 Family" },
 ];
 
-const CURRENCIES = ["USD", "EUR","CAD", "JPY", "KRW"];
+const CURRENCIES = ["CAD", "USD", "EUR", "JPY", "KRW"];
 
 
 
@@ -232,6 +232,7 @@ const GEO_URL = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json"
 function MapPhase({ onConfirm }) {
   const isDarkMode = useIsDarkMode();
   const mapBg = isDarkMode ? "#0f111a" : "#E8F4F8";
+  const cityPingColor = isDarkMode ? "#38bdf8" : "#fff";
 
   const [selected, setSelected] = useState(null);
   const [position, setPosition] = useState({ coordinates: [0, 20], zoom: 1.8 });
@@ -363,8 +364,8 @@ function MapPhase({ onConfirm }) {
               style={{ cursor: "pointer" }}
             >
               <title>{city.name}</title>
-              <circle r={2.6 / position.zoom} fill="#38bdf8" fillOpacity={0.92} />
-              <circle r={5.2 / position.zoom} fill="#38bdf8" fillOpacity={0.2} />
+              <circle r={2.6 / position.zoom} fill={cityPingColor} fillOpacity={0.92} />
+              <circle r={5.2 / position.zoom} fill={cityPingColor} fillOpacity={isDarkMode ? 0.2 : 0.3} />
               {position.zoom >= 2.2 && (
                 <text y={-7 / position.zoom} textAnchor="middle" style={{
                   fontFamily: '"Pixelify Sans", sans-serif',
