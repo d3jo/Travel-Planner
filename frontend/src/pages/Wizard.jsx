@@ -41,7 +41,7 @@ const TRIP_TYPES = [
   { id: "family",  label: "👨‍👩‍👧 Family" },
 ];
 
-const CURRENCIES = ["USD", "EUR", "GBP", "CAD", "AUD", "JPY", "KRW", "THB", "SGD", "MXN"];
+const CURRENCIES = ["USD", "EUR","CAD", "JPY", "KRW"];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function pad2(n) { return String(n).padStart(2, "0"); }
@@ -393,13 +393,11 @@ function StepBox({ children, onBack, backLabel = "← Back", onNext, onSubmit, l
       boxSizing: "border-box",
       display: "flex",
       flexDirection: "column",
-      // Fill remaining space after header + dots + gaps; never overflow viewport
-      maxHeight: "calc(100vh - 200px)",
       minHeight: 0,
-      overflow: "hidden",
+      overflow: "visible",   // remove maxHeight entirely
     }}>
       {/* Scrollable content */}
-      <div style={{ flex: 1, overflowY: "auto", padding: "18px 22px 8px", minHeight: 0 }}>
+      <div style={{ flex: 1, overflowY: "auto", padding: "18px 22px 8px" }}>
         {children}
       </div>
 
@@ -494,32 +492,33 @@ export default function Wizard() {
     else goTo(step - 1);
   };
 
-  const handleSubmit = async () => {
-    setErr(""); setLoading(true);
-    try {
-      const payload = {
-        destination: destination.trim(),
-        start_date: toYYYYMMDD(dateRange.from),
-        end_date: toYYYYMMDD(dateRange.to),
-        budget: Number(budget), currency,
-        budget_priorities: budgetPriorities,
-        activity_preferences: activityPrefs,
-        trip_type: tripType, group_size: Number(groupSize),
-        additional_notes: notes.trim() || null,
-      };
-      const res = await api.post("/plan", payload);
-      nav("/plan", { state: { plan: res.data, preferences: payload } });
-    } catch (e) {
-      const detail = e?.response?.data?.detail;
-      if (detail) {
-        setErr(detail);
-      } else if (e?.code === "ERR_NETWORK") {
-        setErr("Cannot reach the API server. Make sure backend is running and VITE_API_BASE_URL points to it.");
-      } else {
-        setErr(e?.message || "Failed to generate trip plan.");
-      }
-    } finally { setLoading(false); }
-  };
+const handleSubmit = async () => {
+  setErr(""); setLoading(true);
+  try {
+    const payload = {
+      destination: destination.trim(),
+      start_date: toYYYYMMDD(dateRange.from),
+      end_date: toYYYYMMDD(dateRange.to),
+      budget: Number(budget), currency,
+      budget_priorities: budgetPriorities,
+      activity_preferences: activityPrefs,
+      trip_type: tripType, group_size: Number(groupSize),
+      additional_notes: notes.trim() || null,
+    };
+    const res = await api.post("/plan", payload);
+    nav("/plan", { state: { plan: res.data, preferences: payload } });
+  } catch (e) {
+    const detail = e?.response?.data?.detail;
+    if (detail) {
+      setErr(detail);
+    } else if (e?.code === "ERR_NETWORK") {
+      setErr("Cannot reach the API server. Make sure backend is running and VITE_API_BASE_URL points to it.");
+    } else {
+      setErr(e?.message || "Failed to generate trip plan.");
+    }
+  } finally { setLoading(false); }
+};
+
 
   const stepVariants = {
     enter:  (d) => ({ x: d * 60, opacity: 0 }),
@@ -809,22 +808,26 @@ const mapStyles = {
 
 const styles = {
   wrap: {
-    display: "flex", flexDirection: "column", alignItems: "center",
-    height: "100vh", width: "100%",
-    padding: "20px 16px 16px", boxSizing: "border-box", overflow: "hidden",
-  },
-  content: {
-    display: "flex", flexDirection: "column", alignItems: "center",
-    width: "100%", maxWidth: 860,
-    gap: 12, height: "100%", minHeight: 0,
-  },
+  display: "flex", flexDirection: "column", alignItems: "center",
+  minHeight: "100vh",
+  width: "100%",
+  padding: "20px 16px 80px",  // increased bottom padding from 16px to 80px
+  boxSizing: "border-box",
+  overflow: "visible",
+},
+content: {
+  display: "flex", flexDirection: "column", alignItems: "center",
+  width: "100%", maxWidth: 860, maxHeight: "200vh",
+  gap: 12,
+  minHeight: 0,              // remove height: "100%"
+},
   header: { textAlign: "center", width: "100%", flexShrink: 0 },
   title: { fontSize: "1.8rem", fontWeight: 900, fontFamily: '"Pixelify Sans", sans-serif', color: "var(--white)" },
   subtitle: { fontSize: "0.9rem", color: "var(--text-muted)", marginTop: 2 },
   dots: { display: "flex", gap: 6, alignItems: "center", justifyContent: "center", flexShrink: 0 },
   dot: { height: 8, borderRadius: 4, transition: "all 0.3s ease" },
   // cardWrap grows to fill remaining height so StepBox gets the space it needs
-  cardWrap: { width: "100%", flex: 1, minHeight: 0, overflow: "visible" },
+  cardWrap: { width: "100%", minHeight: 0, overflow: "visible" },  // remove flex: 1
   stepLabel: { fontSize: "0.73rem", color: "var(--cal-accent)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" },
   stepTitle: { fontSize: "1.1rem", fontWeight: 700, fontFamily: '"Pixelify Sans", sans-serif', color: "var(--white)" },
   stepHint:  { fontSize: "0.83rem", color: "var(--text-muted)", marginTop: -6 },

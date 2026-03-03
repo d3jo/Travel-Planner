@@ -1,13 +1,39 @@
 import { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
+import { useIsDarkMode } from "../contexts/ThemeContext";
 
 const TABS = ["Overview", "Hotels", "Activities", "Itinerary", "Budget"];
+
+// Inject custom scrollbar styles once
+const scrollbarCSS = `
+  .trip-scroll::-webkit-scrollbar {
+    width: 6px;
+  }
+  .trip-scroll::-webkit-scrollbar-track {
+    background: rgba(255,255,255,0.04);
+    border-radius: 99px;
+    margin: 12px 0;
+  }
+  .trip-scroll::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, #0d9488 0%, #8b5cf6 100%);
+    border-radius: 99px;
+    min-height: 40px;
+  }
+  .trip-scroll::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, #14b8a6 0%, #a78bfa 100%);
+  }
+  .trip-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: #0d9488 rgba(255,255,255,0.04);
+  }
+`;
 
 export default function TripPlan() {
   const loc = useLocation();
   const nav = useNavigate();
   const plan = loc.state?.plan;
+  const isDarkMode = useIsDarkMode();
   const prefs = loc.state?.preferences;
 
   const [activeTab, setActiveTab] = useState("Overview");
@@ -22,56 +48,61 @@ export default function TripPlan() {
   }
 
   return (
-    <div style={styles.wrap}>
-      <div style={styles.content}>
+    <>
+      <style>{scrollbarCSS}</style>
+      <div className="trip-scroll" style={styles.wrap}>
+        <div style={styles.content}>
 
-        {/* Header */}
-        <motion.div initial={{ opacity: 0, y: -16 }} animate={{ opacity: 1, y: 0 }} style={styles.header}>
-          <button style={styles.newTripBtn} onClick={() => nav("/")}>← New Trip</button>
-          <div style={styles.destination}>{prefs?.destination || "Your Trip"}</div>
-          <div style={styles.dateRow}>
-            {prefs?.start_date} → {prefs?.end_date} · {prefs?.group_size} traveler{prefs?.group_size !== 1 ? "s" : ""} · {prefs?.budget?.toLocaleString()} {prefs?.currency}
-          </div>
-        </motion.div>
-
-        {/* Tab Bar */}
-        <div style={styles.tabBar}>
-          {TABS.map((tab) => (
-            <button
-              key={tab}
-              type="button"
-              onClick={() => setActiveTab(tab)}
-              style={{
-                ...styles.tabBtn,
-                borderBottom: activeTab === tab ? "2px solid var(--cal-accent)" : "2px solid transparent",
-                color: activeTab === tab ? "var(--cal-accent-fg)" : "var(--text-muted)",
-                fontWeight: activeTab === tab ? 700 : 400,
-              }}
-            >
-              {tab}
-            </button>
-          ))}
-        </div>
-
-        {/* Tab Content */}
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={activeTab}
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            transition={{ duration: 0.2 }}
-            style={{ width: "100%" }}
-          >
-            {activeTab === "Overview"    && <TabOverview plan={plan} />}
-            {activeTab === "Hotels"      && <TabHotels hotels={plan.hotels || []} currency={prefs?.currency} />}
-            {activeTab === "Activities"  && <TabActivities activities={plan.activities || []} currency={prefs?.currency} />}
-            {activeTab === "Itinerary"   && <TabItinerary itinerary={plan.itinerary || []} currency={prefs?.currency} />}
-            {activeTab === "Budget"      && <TabBudget budget={plan.budget_breakdown} prefs={prefs} />}
+          {/* Header */}
+          <motion.div initial={{ opacity: 0, y: -16 }} animate={{ opacity: 1, y: 0 }} style={styles.header}>
+            <button style={styles.newTripBtn} onClick={() => nav("/")}>← New Trip</button>
+            <div style={styles.destination}>{prefs?.destination || "Your Trip"}</div>
+            <div style={styles.dateRow}>
+              {prefs?.start_date} → {prefs?.end_date} · {prefs?.group_size} traveler{prefs?.group_size !== 1 ? "s" : ""} · {prefs?.budget?.toLocaleString()} {prefs?.currency}
+            </div>
           </motion.div>
-        </AnimatePresence>
+
+          {/* Tab Bar — evenly spaced */}
+          <div style={styles.tabBar}>
+            {TABS.map((tab) => (
+              <button
+                key={tab}
+                type="button"
+                onClick={() => setActiveTab(tab)}
+                style={{
+                  ...styles.tabBtn,
+                  borderBottom: activeTab === tab ? "2px solid var(--cal-accent)" : "2px solid transparent",
+                  color: activeTab === tab
+                    ? (isDarkMode ? "#ffffff" : "#0f172a")
+                    : (isDarkMode ? "rgba(255,255,255,0.35)" : "rgba(15,23,42,0.35)"),
+                  fontWeight: activeTab === tab ? 700 : 400,
+                }}
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
+
+          {/* Tab Content */}
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={activeTab}
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              transition={{ duration: 0.2 }}
+              style={{ width: "100%" }}
+            >
+              {activeTab === "Overview"    && <TabOverview plan={plan} />}
+              {activeTab === "Hotels"      && <TabHotels hotels={plan.hotels || []} currency={prefs?.currency} />}
+              {activeTab === "Activities"  && <TabActivities activities={plan.activities || []} currency={prefs?.currency} />}
+              {activeTab === "Itinerary"   && <TabItinerary itinerary={plan.itinerary || []} currency={prefs?.currency} />}
+              {activeTab === "Budget"      && <TabBudget budget={plan.budget_breakdown} prefs={prefs} />}
+            </motion.div>
+          </AnimatePresence>
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 
@@ -392,12 +423,13 @@ const styles = {
     display: "flex",
     flexDirection: "column",
     alignItems: "center",
-    minHeight: "100vh",
+    height: "calc(100vh - 32px)",  // subtract TitleBar height
     width: "100%",
     padding: "16px 16px 40px",
     boxSizing: "border-box",
-    overflowY: "auto",
-  },
+    overflowY: "scroll",
+    overflowX: "hidden",
+},
   content: {
     display: "flex",
     flexDirection: "column",
@@ -433,23 +465,25 @@ const styles = {
   },
   tabBar: {
     display: "flex",
+    justifyContent: "space-between", // evenly spaced tabs
     width: "100%",
-    gap: 0,
     overflowX: "auto",
     borderBottom: "1px solid var(--border-col)",
   },
   tabBtn: {
-    padding: "10px 14px",
+    flex: 1,
+    padding: "12px 8px",
     background: "transparent",
     border: "none",
     borderRadius: 0,
     cursor: "pointer",
     fontFamily: '"Pixelify Sans", sans-serif',
-    fontSize: "0.9rem",
+    fontSize: "1.05rem",        // bigger
+    letterSpacing: "0.03em",    // slightly spaced
     transition: "color 0.2s, border-color 0.2s",
     whiteSpace: "nowrap",
-    flexShrink: 0,
-  },
+    textAlign: "center",
+},
   tabContent: {
     display: "flex",
     flexDirection: "column",
