@@ -72,10 +72,13 @@ def generate_trip_plan(preferences: Dict[str, Any]) -> Dict[str, Any]:
         '  "overview": string,\n'
         '  "destination_highlights": string,\n'
         '  "hotels": [\n'
-        '    {"name": string, "type": string, "stars": number, "price_per_night": number, "location": string, "why": string, "amenities": [string]}\n'
+        '    {"name": string, "type": string, "stars": number, "price_per_night": number, "location": string, "why": string, "amenities": [string], "booking_url": string}\n'
         "  ],\n"
         '  "activities": [\n'
-        '    {"name": string, "category": string, "cost_per_person": number, "duration": string, "description": string, "best_time": string, "tags": [string]}\n'
+        '    {"name": string, "category": string, "cost_per_person": number, "duration": string, "description": string, "best_time": string, "tags": [string], "booking_url": string}\n'
+        "  ],\n"
+        '  "food_spots": [\n'
+        '    {"name": string, "cuisine": string, "price_level": string, "neighborhood": string, "why_popular": string, "review_summary": string, "booking_url": string}\n'
         "  ],\n"
         '  "itinerary": [\n'
         '    {"day": number, "date": string, "theme": string, "morning": string, "afternoon": string, "evening": string, "meals": {"breakfast": string, "lunch": string, "dinner": string}, "estimated_daily_cost": number}\n'
@@ -88,8 +91,11 @@ def generate_trip_plan(preferences: Dict[str, Any]) -> Dict[str, Any]:
         '  "currency_note": string\n'
         "}\n"
         f"Generate EXACTLY {nights} itinerary days (day 1 through {nights}). "
-        "Recommend 3 hotels and 8-10 activities. All prices in the user's currency. "
-        "Be specific with real place names, restaurants, and neighborhoods."
+        "Recommend EXACTLY 5 hotels and 8-10 activities. Include EXACTLY 10 food_spots. "
+        "For hotels, include a clear mix of 4-5 star luxury and budget-friendly options, tuned to budget priorities and notes. "
+        "If user priorities favor hotels or luxury, bias toward more premium stays. If they favor savings, include stronger budget options. "
+        "All prices in the user's currency. Use real place names and provide valid, direct URLs in booking_url for hotels, activities, and food_spots. "
+        "Actively incorporate additional notes into hotels, activities, food recommendations, and itinerary themes."
     )
 
     user_input = (
@@ -122,6 +128,7 @@ def generate_trip_plan(preferences: Dict[str, Any]) -> Dict[str, Any]:
             "destination_highlights": "",
             "hotels": [],
             "activities": [],
+            "food_spots": [],
             "itinerary": [],
             "budget_breakdown": {
                 "hotels_total": 0, "activities_total": 0, "food_total": 0,
