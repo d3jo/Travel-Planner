@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useIsDarkMode } from "../contexts/ThemeContext";
 
-const TABS = ["Overview", "Hotels", "Activities", "Itinerary", "Budget"];
+const TABS = ["Overview", "Hotels", "Activities", "Food", "Itinerary", "Budget"];
 
 // Inject custom scrollbar styles once
 const scrollbarCSS = `
@@ -93,9 +93,10 @@ export default function TripPlan() {
               transition={{ duration: 0.2 }}
               style={{ width: "100%" }}
             >
-              {activeTab === "Overview"    && <TabOverview plan={plan} />}
+              {activeTab === "Overview"    && <TabOverview plan={plan} prefs={prefs} />}
               {activeTab === "Hotels"      && <TabHotels hotels={plan.hotels || []} currency={prefs?.currency} />}
               {activeTab === "Activities"  && <TabActivities activities={plan.activities || []} currency={prefs?.currency} />}
+              {activeTab === "Food"        && <TabFood foodSpots={plan.food_spots || []} />}
               {activeTab === "Itinerary"   && <TabItinerary itinerary={plan.itinerary || []} currency={prefs?.currency} />}
               {activeTab === "Budget"      && <TabBudget budget={plan.budget_breakdown} prefs={prefs} />}
             </motion.div>
@@ -107,7 +108,7 @@ export default function TripPlan() {
 }
 
 // ─── Overview Tab ─────────────────────────────────────────────────────────────
-function TabOverview({ plan }) {
+function TabOverview({ plan, prefs }) {
   return (
     <div style={styles.tabContent}>
       <Card>
@@ -142,6 +143,17 @@ function TabOverview({ plan }) {
         </Card>
       )}
 
+
+
+      {prefs?.additional_notes && (
+        <Card title="📝 Your Notes, Applied">
+          <p style={styles.noteText}>
+            We actively used your note to tailor hotels, activities, food picks, and itinerary recommendations:
+          </p>
+          <p style={{ ...styles.noteText, marginTop: 8, fontStyle: "italic" }}>“{prefs.additional_notes}”</p>
+        </Card>
+      )}
+
       {(plan.weather_note || plan.currency_note) && (
         <SectionRow>
           {plan.weather_note && (
@@ -157,6 +169,24 @@ function TabOverview({ plan }) {
         </SectionRow>
       )}
     </div>
+  );
+}
+
+function buildSearchUrl(name, location = "") {
+  const query = encodeURIComponent([name, location].filter(Boolean).join(" "));
+  return `https://www.google.com/maps/search/?api=1&query=${query}`;
+}
+
+function normalizeResourceUrl(url, fallbackName, fallbackLocation) {
+  if (typeof url === "string" && /^https?:\/\//i.test(url.trim())) return url.trim();
+  return buildSearchUrl(fallbackName, fallbackLocation);
+}
+
+function ResourceLink({ href, label = "Open link" }) {
+  return (
+    <a href={href} target="_blank" rel="noopener noreferrer" style={styles.linkBtn}>
+      🔗 {label}
+    </a>
   );
 }
 
@@ -180,6 +210,12 @@ function TabHotels({ hotels, currency }) {
           {h.stars && <Stars count={h.stars} />}
           <div style={styles.hotelLocation}>📍 {h.location}</div>
           <p style={styles.hotelWhy}>{h.why}</p>
+          <div style={{ marginTop: 10 }}>
+            <ResourceLink
+              href={normalizeResourceUrl(h.booking_url, h.name, h.location)}
+              label="View hotel details"
+            />
+          </div>
           {h.amenities?.length > 0 && (
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
               {h.amenities.map((a, j) => <Pill key={j} small>{a}</Pill>)}
@@ -208,11 +244,47 @@ function TabActivities({ activities, currency }) {
             <span>💰 {a.cost_per_person > 0 ? `${currency} ${a.cost_per_person?.toLocaleString?.() ?? a.cost_per_person} / person` : "Free"}</span>
             <span>🕐 Best: {a.best_time}</span>
           </div>
+          <div style={{ marginTop: 10 }}>
+            <ResourceLink
+              href={normalizeResourceUrl(a.booking_url, a.name)}
+              label="View activity details"
+            />
+          </div>
           {a.tags?.length > 0 && (
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
               {a.tags.map((t, j) => <Pill key={j} small>{t}</Pill>)}
             </div>
           )}
+        </Card>
+      ))}
+    </div>
+  );
+}
+
+
+// ─── Food Tab ─────────────────────────────────────────────────────────────────
+function TabFood({ foodSpots }) {
+  if (!foodSpots.length) return <EmptyState>No food recommendations available.</EmptyState>;
+  return (
+    <div style={styles.tabContent}>
+      {foodSpots.map((spot, i) => (
+        <Card key={i}>
+          <div style={styles.activityHeader}>
+            <div style={styles.activityName}>{spot.name}</div>
+            <Pill accent>{spot.price_level || "Varied pricing"}</Pill>
+          </div>
+          <p style={styles.activityDesc}>{spot.why_popular}</p>
+          <div style={styles.activityMeta}>
+            <span>🍽️ {spot.cuisine}</span>
+            <span>📍 {spot.neighborhood}</span>
+            {spot.review_summary && <span>⭐ {spot.review_summary}</span>}
+          </div>
+          <div style={{ marginTop: 10 }}>
+            <ResourceLink
+              href={normalizeResourceUrl(spot.booking_url, spot.name, spot.neighborhood)}
+              label="View restaurant"
+            />
+          </div>
         </Card>
       ))}
     </div>
@@ -516,6 +588,17 @@ const styles = {
     borderRadius: 20,
     display: "inline-block",
     lineHeight: 1.4,
+  },
+  linkBtn: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 6,
+    fontSize: "0.82rem",
+    color: "var(--cal-accent-fg)",
+    textDecoration: "none",
+    border: "1px solid var(--cal-accent)",
+    borderRadius: 999,
+    padding: "5px 10px",
   },
   overviewText: {
     color: "var(--white)",
