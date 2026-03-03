@@ -9,7 +9,7 @@ import TripPlan from "./pages/TripPlan";
 function AnimatedRoutes() {
   const location = useLocation();
   return (
-    <div style={{ overflow: "hidden", width: "100%" }}>
+    <div style={{ overflow: "visible", width: "100%" }}>
       <AnimatePresence mode="wait">
         <Routes location={location} key={location.pathname}>
           <Route path="/" element={<PageTransition><Wizard /></PageTransition>} />

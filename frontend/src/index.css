@@ -1,13 +1,12 @@
 html, body {
-  width: 100%;
   height: 100%;
-  overflow: hidden;
+  overflow: hidden; /* keep this — outer shell stays fixed */
 }
 
 #root {
   width: 100%;
   height: 100%;
-  overflow: hidden;
+  overflow: visible; /* allow pages to control their own scrolling */
   position: relative;
 }
 
@@ -182,6 +181,32 @@ body {
   --rdp-range_middle-background-color: rgba(13, 148, 136, 0.2);
   --rdp-range_middle-color: var(--white);
 }
+
+body:not(.light) .calendar-picker .rdp-root {
+  --rdp-nav_button-color: var(--white);
+  --rdp-nav_button-disabled-opacity: 0.35;
+}
+
+body:not(.light) .calendar-picker .rdp-month_caption,
+body:not(.light) .calendar-picker .rdp-weekday {
+  color: var(--white);
+}
+
+body:not(.light) select {
+  color-scheme: dark;
+}
+
+body:not(.light) select option {
+  background-color: #1f2333;
+  color: #ffffff;
+}
+
+body.light select option {
+  background-color: #fff9f0;
+  color: #334455;
+}
+
+
 
 .calendar-picker .rdp-range_start .rdp-day_button,
 .calendar-picker .rdp-range_end .rdp-day_button {
