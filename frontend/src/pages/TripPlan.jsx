@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useIsDarkMode } from "../contexts/ThemeContext";
 
-const TABS = ["Overview", "Hotels", "Activities", "Food", "Itinerary", "Budget"];
+const TABS = ["Overview", "Hotels", "Activities", "Food", "Transportation", "Itinerary", "Budget"];
 
 // Inject custom scrollbar styles once
 const scrollbarCSS = `
@@ -26,6 +26,12 @@ const scrollbarCSS = `
   .trip-scroll {
     scrollbar-width: thin;
     scrollbar-color: #0d9488 rgba(255,255,255,0.04);
+  }
+  .trip-tab-btn:focus,
+  .trip-tab-btn:focus-visible,
+  .trip-tab-btn:active {
+    outline: none !important;
+    box-shadow: none !important;
   }
 `;
 
@@ -62,12 +68,23 @@ export default function TripPlan() {
             </div>
           </motion.div>
 
+
+          <div style={styles.pricingWarning}>
+            <span style={styles.pricingWarningIcon}>⚠️</span>
+            <span style={styles.pricingWarningText}>
+              Budget and pricing figures are rough estimates and may vary based on factors
+            </span>
+          </div>
+
+
+
           {/* Tab Bar — evenly spaced */}
           <div style={styles.tabBar}>
             {TABS.map((tab) => (
               <button
                 key={tab}
                 type="button"
+                className="trip-tab-btn"
                 onClick={() => setActiveTab(tab)}
                 style={{
                   ...styles.tabBtn,
@@ -97,6 +114,7 @@ export default function TripPlan() {
               {activeTab === "Hotels"      && <TabHotels hotels={plan.hotels || []} currency={prefs?.currency} />}
               {activeTab === "Activities"  && <TabActivities activities={plan.activities || []} currency={prefs?.currency} />}
               {activeTab === "Food"        && <TabFood foodSpots={plan.food_spots || []} />}
+              {activeTab === "Transportation" && <TabTransportation options={plan.transportation_options || []} currency={prefs?.currency} origin={prefs?.origin} destination={prefs?.destination} />}
               {activeTab === "Itinerary"   && <TabItinerary itinerary={plan.itinerary || []} currency={prefs?.currency} />}
               {activeTab === "Budget"      && <TabBudget budget={plan.budget_breakdown} prefs={prefs} />}
             </motion.div>
@@ -290,6 +308,38 @@ function TabFood({ foodSpots }) {
     </div>
   );
 }
+
+
+
+// ─── Transportation Tab ───────────────────────────────────────────────────────
+function TabTransportation({ options, currency, origin, destination }) {
+  if (!options.length) return <EmptyState>No transportation options available.</EmptyState>;
+  return (
+    <div style={styles.tabContent}>
+      {(origin || destination) && (
+        <Card>
+          <p style={styles.noteText}>From <strong>{origin || "your location"}</strong> to <strong>{destination || "your destination"}</strong></p>
+        </Card>
+      )}
+      {options.map((opt, i) => (
+        <Card key={i}>
+          <div style={styles.activityHeader}>
+            <div style={styles.activityName}>🚗 {opt.mode}</div>
+            <Pill accent>Est. {currency} {opt.estimated_cost_per_group?.toLocaleString?.() ?? opt.estimated_cost_per_group}</Pill>
+          </div>
+          <div style={styles.activityMeta}>
+            <span>⏱️ {opt.duration}</span>
+          </div>
+          <p style={styles.activityDesc}>{opt.why}</p>
+          {opt.notes && <p style={{ ...styles.noteText, marginTop: 6 }}>{opt.notes}</p>}
+        </Card>
+      ))}
+    </div>
+  );
+}
+
+
+
 
 // ─── Itinerary Tab ────────────────────────────────────────────────────────────
 function TabItinerary({ itinerary, currency }) {
@@ -535,6 +585,26 @@ const styles = {
     color: "var(--text-muted)",
     marginTop: 4,
   },
+  pricingWarning: {
+    width: "100%",
+    display: "flex",
+    alignItems: "flex-start",
+    gap: 8,
+    padding: "10px 12px",
+    borderRadius: 10,
+    border: "1px solid rgba(154, 100, 7, 0.5)",
+    background: "rgba(245, 158, 11, 0.12)",
+    color: "#90710f",
+    boxSizing: "border-box",
+  },
+  pricingWarningIcon: {
+    lineHeight: 1.2,
+    marginTop: 1,
+  },
+  pricingWarningText: {
+    fontSize: "0.84rem",
+    lineHeight: 1.45,
+  },
   tabBar: {
     display: "flex",
     justifyContent: "space-between", // evenly spaced tabs
@@ -553,6 +623,8 @@ const styles = {
     fontSize: "1.05rem",        // bigger
     letterSpacing: "0.03em",    // slightly spaced
     transition: "color 0.2s, border-color 0.2s",
+    outline: "none",
+    boxShadow: "none",
     whiteSpace: "nowrap",
     textAlign: "center",
 },

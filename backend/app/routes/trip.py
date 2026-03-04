@@ -12,6 +12,7 @@ router = APIRouter()
 
 
 class TripPreferences(BaseModel):
+    origin: str
     destination: str
     start_date: str
     end_date: str
@@ -32,6 +33,8 @@ class CityRecommendationsRequest(BaseModel):
 
 @router.post("/plan")
 async def create_trip_plan(prefs: TripPreferences) -> Dict[str, Any]:
+    if not prefs.origin.strip():
+        raise HTTPException(status_code=400, detail="Origin is required.")
     if not prefs.destination.strip():
         raise HTTPException(status_code=400, detail="Destination is required.")
     if not prefs.start_date or not prefs.end_date:

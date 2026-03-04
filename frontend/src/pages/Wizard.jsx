@@ -605,6 +605,7 @@ export default function Wizard() {
   const nav = useNavigate();
 
   const [mapDone, setMapDone]         = useState(false);
+  const [origin, setOrigin]           = useState("");
   const [destination, setDestination] = useState("");
 
   const [step, setStep]           = useState(0);
@@ -636,6 +637,7 @@ export default function Wizard() {
 
   const validateStep = () => {
     if (step === 0) {
+      if (!origin.trim()) { setErr("Please tell us where you are traveling from."); return false; }
       if (!dateRange.from || !dateRange.to) { setErr("Please select your travel dates."); return false; }
       if (!budget || Number(budget) <= 0)   { setErr("Please enter your total budget."); return false; }
     }
@@ -653,6 +655,7 @@ const handleSubmit = async () => {
   setErr(""); setLoading(true);
   try {
     const payload = {
+      origin: origin.trim(),
       destination: destination.trim(),
       start_date: toYYYYMMDD(dateRange.from),
       end_date: toYYYYMMDD(dateRange.to),
@@ -724,6 +727,7 @@ const handleSubmit = async () => {
                     dateRange={dateRange} setDateRange={setDateRange}
                     showCal={showCal} setShowCal={setShowCal}
                     calMonth={calMonth} setCalMonth={setCalMonth}
+                    origin={origin} setOrigin={setOrigin}
                     budget={budget} setBudget={setBudget}
                     currency={currency} setCurrency={setCurrency}
                   />
@@ -759,7 +763,7 @@ const handleSubmit = async () => {
 // ─── Step Content ─────────────────────────────────────────────────────────────
 
 function StepDatesAndBudget({
-  dateRange, setDateRange, showCal, setShowCal, calMonth, setCalMonth,
+  origin, setOrigin, dateRange, setDateRange, showCal, setShowCal, calMonth, setCalMonth,
   budget, setBudget, currency, setCurrency,
 }) {
   const isDarkMode = useIsDarkMode();
@@ -778,6 +782,17 @@ function StepDatesAndBudget({
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14, paddingBottom: 6 }}>
       <div style={styles.stepLabel}>Step 1 of 3</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <div style={styles.stepTitle}>Where are you traveling from?</div>
+        <input
+          type="text"
+          placeholder="e.g. Toronto, Canada"
+          value={origin}
+          onChange={(e) => setOrigin(e.target.value)}
+          style={{ ...styles.input, background: inputBg, border: panelBorder }}
+        />
+        <div style={styles.stepHint}>We use this to estimate the best transportation methods to your destination.</div>
+      </div>
       <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1.35fr) minmax(0,1fr)", gap: 18 }}>
         {/* Left: calendar */}
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>

@@ -38,6 +38,78 @@ def _responses_text(*, instructions: str, user_input: str, max_output_tokens: in
     return (resp.output_text or "").strip()
 
 
+
+
+def _extract_first_json_object(raw: str) -> Optional[Dict[str, Any]]:
+    """Best-effort JSON extraction when model adds surrounding text."""
+    decoder = json.JSONDecoder()
+    for idx, ch in enumerate(raw):
+        if ch != "{":
+            continue
+        try:
+            obj, _ = decoder.raw_decode(raw[idx:])
+            if isinstance(obj, dict):
+                return obj
+        except json.JSONDecodeError:
+            continue
+    return None
+
+
+def _default_trip_plan(raw_text: str) -> Dict[str, Any]:
+    return {
+        "overview": raw_text[:500] if raw_text else "Could not parse trip plan.",
+        "destination_highlights": "",
+        "hotels": [],
+        "activities": [],
+        "food_spots": [],
+        "transportation_options": [],
+        "itinerary": [],
+        "budget_breakdown": {
+            "hotels_total": 0, "activities_total": 0, "food_total": 0,
+            "transport_total": 0, "shopping_misc_total": 0,
+            "grand_total": 0, "within_budget": True, "savings_tip": ""
+        },
+        "local_tips": [],
+        "best_neighborhoods": [],
+        "must_try_foods": [],
+        "weather_note": "",
+        "currency_note": "",
+        "_parse_error": True,
+        "_raw": raw_text[:2000],
+    }
+
+
+def _parse_trip_plan_payload(raw: str) -> Dict[str, Any]:
+    cleaned = raw.strip()
+    if cleaned.startswith("```"):
+        cleaned = cleaned.split("```")[1]
+        if cleaned.startswith("json"):
+            cleaned = cleaned[4:]
+        cleaned = cleaned.strip()
+
+    parsed: Optional[Dict[str, Any]] = None
+    try:
+        data = json.loads(cleaned)
+        if isinstance(data, str):
+            data = json.loads(data)
+        if isinstance(data, dict):
+            parsed = data
+    except json.JSONDecodeError:
+        parsed = _extract_first_json_object(cleaned)
+
+    if not parsed:
+        return _default_trip_plan(cleaned)
+
+    fallback = _default_trip_plan(cleaned)
+    fallback.pop("_parse_error", None)
+    fallback.pop("_raw", None)
+    fallback.update(parsed)
+    return fallback
+
+
+
+
+
 def generate_trip_plan(preferences: Dict[str, Any]) -> Dict[str, Any]:
     """
     Generate a full trip plan from user preferences.
@@ -73,13 +145,11 @@ def generate_trip_plan(preferences: Dict[str, Any]) -> Dict[str, Any]:
         '  "destination_highlights": string,\n'
         '  "hotels": [\n'
         '    {"name": string, "type": string, "stars": number, "price_per_night": number, "location": string, "why": string, "amenities": [string], "booking_url": string}\n'
-        "  ],\n"
         '  "activities": [\n'
         '    {"name": string, "category": string, "cost_per_person": number, "duration": string, "description": string, "best_time": string, "tags": [string], "booking_url": string}\n'
         "  ],\n"
         '  "food_spots": [\n'
         '    {"name": string, "cuisine": string, "price_level": string, "neighborhood": string, "why_popular": string, "review_summary": string, "booking_url": string}\n'
-        "  ],\n"
         '  "itinerary": [\n'
         '    {"day": number, "date": string, "theme": string, "morning": string, "afternoon": string, "evening": string, "meals": {"breakfast": string, "lunch": string, "dinner": string}, "estimated_daily_cost": number}\n'
         "  ],\n"
@@ -111,38 +181,7 @@ def generate_trip_plan(preferences: Dict[str, Any]) -> Dict[str, Any]:
     )
 
     raw = _responses_text(instructions=instructions, user_input=user_input, max_output_tokens=3000)
-
-    # Strip any accidental markdown fences
-    if raw.startswith("```"):
-        raw = raw.split("```")[1]
-        if raw.startswith("json"):
-            raw = raw[4:]
-        raw = raw.strip()
-
-    try:
-        return json.loads(raw)
-    except json.JSONDecodeError:
-        # Return a minimal fallback structure
-        return {
-            "overview": raw[:500] if raw else "Could not parse trip plan.",
-            "destination_highlights": "",
-            "hotels": [],
-            "activities": [],
-            "food_spots": [],
-            "itinerary": [],
-            "budget_breakdown": {
-                "hotels_total": 0, "activities_total": 0, "food_total": 0,
-                "transport_total": 0, "shopping_misc_total": 0,
-                "grand_total": 0, "within_budget": True, "savings_tip": ""
-            },
-            "local_tips": [],
-            "best_neighborhoods": [],
-            "must_try_foods": [],
-            "weather_note": "",
-            "currency_note": "",
-            "_parse_error": True,
-            "_raw": raw[:2000],
-        }
+    return _parse_trip_plan_payload(raw)
 
 
 
