@@ -593,7 +593,7 @@ function StepBox({ children, onBack, backLabel = "← Back", onNext, onSubmit, l
 
       {loading && (
         <div style={{ ...styles.loadingNote, padding: "0 22px 10px", flexShrink: 0 }}>
-          AI is crafting your personalized plan. This may take 15–30 seconds…
+          AI is crafting your personalized plan. This may take 1 to 2 minutes . . .
         </div>
       )}
     </div>
@@ -762,6 +762,7 @@ const handleSubmit = async () => {
 
 // ─── Step Content ─────────────────────────────────────────────────────────────
 
+
 function StepDatesAndBudget({
   origin, setOrigin, dateRange, setDateRange, showCal, setShowCal, calMonth, setCalMonth,
   budget, setBudget, currency, setCurrency,
@@ -780,47 +781,35 @@ function StepDatesAndBudget({
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 14, paddingBottom: 6 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 10, paddingBottom: 4 }}>
+      <style>{`
+        .calendar-picker .rdp { margin: 0; width: 100%; }
+        .calendar-picker .rdp-month { width: 100%; }
+        .calendar-picker .rdp-table { width: 100%; border-collapse: collapse; }
+        .calendar-picker .rdp-cell, .calendar-picker .rdp-head_cell { padding: 2px; text-align: center; }
+        .calendar-picker .rdp-day { height: 32px; width: 100%; max-width: 100%; font-size: 1rem; border-radius: 6px; }
+        .calendar-picker .rdp-caption { padding: 4px 0; margin-bottom: 4px; }
+        .calendar-picker .rdp-head_cell { font-size: 1rem; }
+        .calendar-picker .rdp-caption_label { font-size: 1rem; padding-left: 15px; }
+      `}</style>
+
       <div style={styles.stepLabel}>Step 1 of 3</div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        <div style={styles.stepTitle}>Where are you traveling from?</div>
-        <input
-          type="text"
-          placeholder="e.g. Toronto, Canada"
-          value={origin}
-          onChange={(e) => setOrigin(e.target.value)}
-          style={{ ...styles.input, background: inputBg, border: panelBorder }}
-        />
-        <div style={styles.stepHint}>We use this to estimate the best transportation methods to your destination.</div>
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1.35fr) minmax(0,1fr)", gap: 18 }}>
-        {/* Left: calendar */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <div style={styles.stepTitle}>When are you traveling?</div>
-          <button type="button"
-            style={{ ...styles.dateDisplayBtn, background: inputBg, border: panelBorder }}
-            onClick={() => setShowCal((v) => !v)}
-          >📅 {formatDateRange(dateRange)}</button>
-          <AnimatePresence>
-            {showCal && (
-              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }}
-                exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.22 }}
-                style={{ overflow: "hidden" }}
-              >
-                <div className="calendar-picker" style={{
-                  ...styles.calCard, background: inputBg, border: panelBorder, fontSize: "0.88rem",
-                }}>
-                  <DayPicker mode="range" selected={dateRange} onSelect={handleDateSelect}
-                    month={calMonth} onMonthChange={setCalMonth}
-                    disabled={{ before: new Date() }} showOutsideDays
-                  />
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+
+      {/* Row 1: origin + budget side by side */}
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1.4fr) minmax(0,1fr)", gap: 10 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <div style={styles.stepTitle}>Where are you traveling from?</div>
+          <input
+            type="text"
+            placeholder="e.g. Toronto, Canada"
+            value={origin}
+            onChange={(e) => setOrigin(e.target.value)}
+            style={{ ...styles.input, background: inputBg, border: panelBorder }}
+          />
+          <div style={styles.stepHint}>We use this to estimate the best transportation methods.</div>
         </div>
-        {/* Right: budget */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           <div style={styles.stepTitle}>Total budget?</div>
           <div style={{ display: "flex", gap: 8 }}>
             <select value={currency} onChange={(e) => setCurrency(e.target.value)}
@@ -834,9 +823,44 @@ function StepDatesAndBudget({
           <div style={styles.stepHint}>Hotels, food, activities, transport — all included</div>
         </div>
       </div>
+
+      {/* Row 2: date trigger + full-width calendar below */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        <div style={styles.stepTitle}>When are you traveling?</div>
+        <button type="button"
+          style={{ ...styles.dateDisplayBtn, background: inputBg, border: panelBorder }}
+          onClick={() => setShowCal((v) => !v)}
+        >📅 {formatDateRange(dateRange)}</button>
+        <AnimatePresence>
+          {showCal && (
+            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.22 }}
+              style={{ overflow: "hidden" }}
+            >
+              <div className="calendar-picker" style={{
+                ...styles.calCard, background: inputBg, border: panelBorder,
+                padding: '1px 1px',
+                transform: "scale(0.85)",
+                transformOrigin: "top center",
+                marginTop: 10,
+                marginBottom: -50,
+
+              }}>
+                <DayPicker mode="range" selected={dateRange} onSelect={handleDateSelect}
+                  month={calMonth} onMonthChange={setCalMonth}
+                  disabled={{ before: new Date() }} showOutsideDays
+                />
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
     </div>
   );
 }
+
+
+
 
 function StepPreferences({ budgetPriorities, togglePriority, activityPrefs, toggleActivity }) {
   return (
@@ -918,7 +942,7 @@ function LoadingDots() {
         <motion.span key={i}
           style={{ width: 6, height: 6, borderRadius: "50%", background: "#fff", display: "inline-block" }}
           animate={{ opacity: [0.3, 1, 0.3], y: [0, -4, 0] }}
-          transition={{ duration: 0.8, repeat: Infinity, delay: i * 0.2 }}
+          transition={{ duration: 0.8, repeat: Infinity, delay: i * 0.2 }} outsideda
         />
       ))}
     </span>
@@ -1043,7 +1067,7 @@ content: {
     color: "var(--white)", fontSize: "0.92rem", textAlign: "left",
     cursor: "pointer", fontFamily: '"Pixelify Sans", sans-serif',
   },
-  calCard: { borderRadius: 12, padding: 8, marginTop: 4 },
+  calCard: { borderRadius: 12, padding: 4, marginTop: 2 },
   tagGrid: { display: "flex", flexWrap: "wrap", gap: 8 },
   tag: { padding: "8px 14px", borderRadius: 20, cursor: "pointer", fontSize: "0.88rem", fontFamily: "inherit", transition: "all 0.15s" },
   tagRank: {
