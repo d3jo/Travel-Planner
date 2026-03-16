@@ -7,10 +7,12 @@ An AI-powered trip planner that generates personalized itineraries, hotel picks,
 ```
 trip-planner-ai-agent/
 ├── backend/        FastAPI + OpenAI (no database, no auth)
-└── frontend/       React + Vite (same style as Diary Tracker)
+└── frontend/       React + Vite web app
 ```
 
 ## Setup
+
+> Tip: Use repository-relative paths (`cd backend`, `cd frontend`) from the project root instead of absolute workspace paths, since local folder prefixes can vary (`/workspace` vs `/workspaces`).
 
 ### 1. Backend
 
@@ -47,6 +49,7 @@ uvicorn app.main:app --reload
 cd frontend
 
 # Install dependencies (skip if node_modules already exists)
+# .npmrc enables legacy peer dependency resolution for current map libs
 npm install
 
 # Optional: point frontend to a custom backend URL
@@ -55,6 +58,9 @@ npm install
 # Start dev server
 npm run dev
 # Runs on http://localhost:5173
+
+# Optional: serve production build locally
+# npm run build && npm run preview
 ```
 
 Open [http://localhost:5173](http://localhost:5173) in your browser.
