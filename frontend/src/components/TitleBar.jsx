@@ -3,17 +3,30 @@ import shrinkIcon from "../assets/shrink-icon.png";
 import { useTheme } from "../contexts/ThemeContext";
 
 export default function TitleBar() {
-  if (typeof window === "undefined" || !window.electron) return null;
-
-  const { close, minimize } = window.electron;
   const { isDark, toggle } = useTheme();
+  const hasElectronWindowControls = typeof window !== "undefined" && Boolean(window.electron);
+
+  const handleMinimize = () => {
+    if (!hasElectronWindowControls) return;
+    window.electron.minimize();
+  };
+
+  const handleClose = () => {
+    if (!hasElectronWindowControls) return;
+    window.electron.close();
+  };
 
   const barHeight = 56;
 
   return (
     <>
-      <div style={{ ...styles.bar, height: barHeight }}>
-        {/* Theme toggle — top left, no-drag */}
+      <div
+        style={{
+          ...styles.bar,
+          height: barHeight,
+          WebkitAppRegion: hasElectronWindowControls ? "drag" : "initial",
+        }}
+      >
         <button
           type="button"
           style={styles.themeBtn}
@@ -24,30 +37,37 @@ export default function TitleBar() {
           {isDark ? "☀️" : "🌙"}
         </button>
 
-        {/* Drag region fills the middle */}
-        <div style={styles.dragRegion} />
+        <div
+          style={{
+            ...styles.dragRegion,
+            WebkitAppRegion: hasElectronWindowControls ? "drag" : "initial",
+          }}
+        />
 
-        {/* Window controls — top right */}
-        <div style={styles.winControls}>
-          <button
-            type="button"
-            style={styles.btn}
-            onClick={minimize}
-            title="Minimize"
-            aria-label="Minimize"
-          >
-            <img src={shrinkIcon} alt="" style={styles.icon} />
-          </button>
-          <button
-            type="button"
-            style={styles.btn}
-            onClick={close}
-            title="Close"
-            aria-label="Close"
-          >
-            <img src={closeIcon} alt="" style={styles.icon} />
-          </button>
-        </div>
+        {hasElectronWindowControls ? (
+          <div style={styles.winControls}>
+            <button
+              type="button"
+              style={styles.btn}
+              onClick={handleMinimize}
+              title="Minimize"
+              aria-label="Minimize"
+            >
+              <img src={shrinkIcon} alt="" style={styles.icon} />
+            </button>
+            <button
+              type="button"
+              style={styles.btn}
+              onClick={handleClose}
+              title="Close"
+              aria-label="Close"
+            >
+              <img src={closeIcon} alt="" style={styles.icon} />
+            </button>
+          </div>
+        ) : (
+          <div style={styles.rightSpacer} aria-hidden="true" />
+        )}
       </div>
       <div style={{ height: barHeight, flexShrink: 0 }} aria-hidden="true" />
     </>
@@ -64,13 +84,11 @@ const styles = {
     alignItems: "center",
     justifyContent: "space-between",
     background: "transparent",
-    WebkitAppRegion: "drag",
     zIndex: 9999,
   },
   dragRegion: {
     flex: 1,
     alignSelf: "stretch",
-    WebkitAppRegion: "drag",
   },
   themeBtn: {
     width: 56,
@@ -94,6 +112,11 @@ const styles = {
     WebkitAppRegion: "no-drag",
     position: "relative",
     zIndex: 1,
+    flexShrink: 0,
+  },
+  rightSpacer: {
+    width: 56,
+    height: 56,
     flexShrink: 0,
   },
   btn: {

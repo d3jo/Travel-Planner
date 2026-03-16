@@ -23,11 +23,6 @@ function resolveApiBaseUrl() {
 
   if (typeof window === "undefined") return "http://127.0.0.1:8000";
 
-  if (window.location.protocol === "file:") {
-    // Electron production/file:// app
-    return "http://127.0.0.1:8000";
-  }
-
   const { hostname, protocol, origin } = window.location;
 
   // In hosted environments (non-localhost), backend is often reverse-proxied
