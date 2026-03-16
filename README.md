@@ -7,7 +7,7 @@ An AI-powered trip planner that generates personalized itineraries, hotel picks,
 ```
 trip-planner-ai-agent/
 ├── backend/        FastAPI + OpenAI (no database, no auth)
-└── frontend/       React + Vite (same style as Diary Tracker)
+└── frontend/       React + Vite web app
 ```
 
 ## Setup
@@ -55,6 +55,9 @@ npm install
 # Start dev server
 npm run dev
 # Runs on http://localhost:5173
+
+# Optional: serve production build locally
+# npm run build && npm run preview
 ```
 
 Open [http://localhost:5173](http://localhost:5173) in your browser.
