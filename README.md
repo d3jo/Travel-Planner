@@ -12,6 +12,8 @@ trip-planner-ai-agent/
 
 ## Setup
 
+> Tip: Use repository-relative paths (`cd backend`, `cd frontend`) from the project root instead of absolute workspace paths, since local folder prefixes can vary (`/workspace` vs `/workspaces`).
+
 ### 1. Backend
 
 ```bash
@@ -47,6 +49,7 @@ uvicorn app.main:app --reload
 cd frontend
 
 # Install dependencies (skip if node_modules already exists)
+# .npmrc enables legacy peer dependency resolution for current map libs
 npm install
 
 # Optional: point frontend to a custom backend URL
