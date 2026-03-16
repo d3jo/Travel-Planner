@@ -1,11 +1,11 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { DayPicker } from "react-day-picker";
 import { AnimatePresence, motion } from "framer-motion";
 import { ComposableMap, Geographies, Geography, ZoomableGroup, Marker as MapMarker } from "react-simple-maps";
 import "react-day-picker/dist/style.css";
 import api from "../api";
-import { useIsDarkMode } from "../contexts/ThemeContext";
+import { useIsDarkMode, useTheme } from "../contexts/ThemeContext";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const TOTAL_STEPS = 3;
@@ -43,9 +43,6 @@ const TRIP_TYPES = [
 
 const CURRENCIES = ["CAD", "USD", "EUR", "JPY", "KRW"];
 
-
-
-
 const EMPTY_RECOMMENDATIONS = [];
 
 function normalizeCountryName(name = "") {
@@ -65,11 +62,6 @@ function cityPhotoUrls(cityName, countryName) {
     `https://source.unsplash.com/640x420/?${query}&sig=2`,
   ];
 }
-
-
-
-
-
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function pad2(n) { return String(n).padStart(2, "0"); }
@@ -231,6 +223,7 @@ const GEO_URL = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json"
 // ─── Map Phase ────────────────────────────────────────────────────────────────
 function MapPhase({ onConfirm }) {
   const isDarkMode = useIsDarkMode();
+  const { toggle } = useTheme();
   const mapBg = isDarkMode ? "#0f111a" : "#E8F4F8";
   const cityPingColor = isDarkMode ? "#38bdf8" : "#fff";
 
@@ -243,7 +236,8 @@ function MapPhase({ onConfirm }) {
   const [recommendationLoading, setRecommendationLoading] = useState(false);
   const [recommendationError, setRecommendationError] = useState("");
 
-  const constrain = (pos) => {
+  // Pure calculation — no deps, safe to memoize once
+  const constrain = useCallback((pos) => {
     const vw = 360 / Math.max(1, pos.zoom);
     const vh = 180 / Math.max(1, pos.zoom);
     return {
@@ -253,7 +247,24 @@ function MapPhase({ onConfirm }) {
       ],
       zoom: Math.max(1.8, Math.min(12, pos.zoom)),
     };
-  };
+  }, []);
+
+  // Intercept trackpad pinch-to-zoom so only the map zooms, not the whole page
+  useEffect(() => {
+    const el = document.getElementById("map-container");
+    if (!el) return;
+
+    const handleWheel = (e) => {
+      if (e.ctrlKey) {
+        e.preventDefault();
+        const delta = -e.deltaY * 0.01;
+        setPosition((prev) => constrain({ ...prev, zoom: prev.zoom + delta }));
+      }
+    };
+
+    el.addEventListener("wheel", handleWheel, { passive: false });
+    return () => el.removeEventListener("wheel", handleWheel);
+  }, [constrain]);
 
   const handleCountryClick = useCallback(async (geo) => {
     const name = geo.properties.name;
@@ -287,9 +298,7 @@ function MapPhase({ onConfirm }) {
     setCityRecommendations([]);
     setRecommendationError("");
     setPosition(constrain({ coordinates: [coords[1], coords[0]], zoom: 5 }));
-  }, []);
-
-
+  }, [constrain]);
 
   const fetchRecommendations = useCallback(async (countryName) => {
     if (!countryName) return;
@@ -318,15 +327,11 @@ function MapPhase({ onConfirm }) {
     }
   }, []);
 
-
-
-
-
   const handleZoom = (delta) =>
     setPosition((prev) => constrain({ ...prev, zoom: prev.zoom + delta }));
 
   return (
-    <div style={{ ...mapStyles.wrap, background: mapBg }}>
+    <div id="map-container" style={{ ...mapStyles.wrap, background: mapBg }}>
       <ComposableMap projection="geoMercator" projectionConfig={{ scale: 145 }}
         style={{ width: "100%", height: "100%", background: mapBg }}
       >
@@ -392,11 +397,27 @@ function MapPhase({ onConfirm }) {
           transition={{ duration: 0.6, delay: 0.1 }}
           style={{
             ...mapStyles.titleCard,
+            position: "relative",
             background: isDarkMode ? "rgba(10,10,18,0.82)" : "rgba(255,249,240,0.95)",
             border: isDarkMode ? "1px solid rgba(255,255,255,0.12)" : "1px solid rgba(168,207,223,0.3)",
             boxShadow: isDarkMode ? "0 8px 40px rgba(0,0,0,0.5)" : "0 4px 16px rgba(168,207,223,0.15)",
           }}
         >
+          {/* Theme toggle — top right of card */}
+          <button
+            type="button"
+            onClick={toggle}
+            style={{
+              position: "absolute", top: 14, right: 14,
+              background: "transparent",
+              border: isDarkMode ? "1px solid rgba(255,255,255,0.2)" : "1px solid rgba(168,207,223,0.4)",
+              borderRadius: 8, padding: "4px 8px",
+              cursor: "pointer", fontSize: "1rem", lineHeight: 1,
+            }}
+          >
+            {isDarkMode ? "☀️" : "🌙"}
+          </button>
+
           <div style={mapStyles.appName}>✈️ Trip Planner AI</div>
           <div style={{ ...mapStyles.heroTitle, color: isDarkMode ? "#fff" : "#334455" }}>Where do you want to go?</div>
           <div style={{ ...mapStyles.heroHint, color: isDarkMode ? "rgba(255,255,255,0.45)" : "rgba(100,120,140,0.6)" }}>
@@ -535,8 +556,7 @@ function StepDots({ step }) {
   );
 }
 
-// ─── StepBox — unified shell for all 3 steps ─────────────────────────────────
-// Constrains height to viewport, scrolls content internally, nav bar always visible
+// ─── StepBox ──────────────────────────────────────────────────────────────────
 function StepBox({ children, onBack, backLabel = "← Back", onNext, onSubmit, loading, err, isLast }) {
   const isDarkMode = useIsDarkMode();
   const borderColor = isDarkMode ? "rgba(255,255,255,0.12)" : "rgba(168,207,223,0.35)";
@@ -551,21 +571,18 @@ function StepBox({ children, onBack, backLabel = "← Back", onNext, onSubmit, l
       display: "flex",
       flexDirection: "column",
       minHeight: 0,
-      overflow: "visible",   // remove maxHeight entirely
+      overflow: "visible",
     }}>
-      {/* Scrollable content */}
-      <div style={{ flex: 1, overflowY: "auto", padding: "18px 22px 8px" }}>
+      <div style={{ flex: 1, overflowY: "auto", padding: "18px 22px 8px", maxHeight: "calc(100vh - 220px)" }}>
         {children}
       </div>
 
-      {/* Error (inside box, above nav) */}
       {err && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
           style={{ ...styles.errBox, margin: "0 22px 0", flexShrink: 0 }}
         >{err}</motion.div>
       )}
 
-      {/* Nav bar — sticky at bottom of box */}
       <div style={{
         display: "flex", alignItems: "center", gap: 10,
         padding: "12px 22px 14px",
@@ -603,6 +620,7 @@ function StepBox({ children, onBack, backLabel = "← Back", onNext, onSubmit, l
 // ─── Wizard ───────────────────────────────────────────────────────────────────
 export default function Wizard() {
   const nav = useNavigate();
+  const { isDark, toggle } = useTheme();
 
   const [mapDone, setMapDone]         = useState(false);
   const [origin, setOrigin]           = useState("");
@@ -651,34 +669,33 @@ export default function Wizard() {
     else goTo(step - 1);
   };
 
-const handleSubmit = async () => {
-  setErr(""); setLoading(true);
-  try {
-    const payload = {
-      origin: origin.trim(),
-      destination: destination.trim(),
-      start_date: toYYYYMMDD(dateRange.from),
-      end_date: toYYYYMMDD(dateRange.to),
-      budget: Number(budget), currency,
-      budget_priorities: budgetPriorities,
-      activity_preferences: activityPrefs,
-      trip_type: tripType, group_size: Number(groupSize),
-      additional_notes: notes.trim() || null,
-    };
-    const res = await api.post("/plan", payload);
-    nav("/plan", { state: { plan: res.data, preferences: payload } });
-  } catch (e) {
-    const detail = e?.response?.data?.detail;
-    if (detail) {
-      setErr(detail);
-    } else if (e?.code === "ERR_NETWORK") {
-      setErr("Cannot reach the API server. Make sure backend is running and VITE_API_BASE_URL points to it.");
-    } else {
-      setErr(e?.message || "Failed to generate trip plan.");
-    }
-  } finally { setLoading(false); }
-};
-
+  const handleSubmit = async () => {
+    setErr(""); setLoading(true);
+    try {
+      const payload = {
+        origin: origin.trim(),
+        destination: destination.trim(),
+        start_date: toYYYYMMDD(dateRange.from),
+        end_date: toYYYYMMDD(dateRange.to),
+        budget: Number(budget), currency,
+        budget_priorities: budgetPriorities,
+        activity_preferences: activityPrefs,
+        trip_type: tripType, group_size: Number(groupSize),
+        additional_notes: notes.trim() || null,
+      };
+      const res = await api.post("/plan", payload);
+      nav("/plan", { state: { plan: res.data, preferences: payload } });
+    } catch (e) {
+      const detail = e?.response?.data?.detail;
+      if (detail) {
+        setErr(detail);
+      } else if (e?.code === "ERR_NETWORK") {
+        setErr("Cannot reach the API server. Make sure backend is running and VITE_API_BASE_URL points to it.");
+      } else {
+        setErr(e?.message || "Failed to generate trip plan.");
+      }
+    } finally { setLoading(false); }
+  };
 
   const stepVariants = {
     enter:  (d) => ({ x: d * 60, opacity: 0 }),
@@ -700,10 +717,23 @@ const handleSubmit = async () => {
 
   return (
     <motion.div key="form" initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.45, ease: "easeOut" }} style={styles.wrap}
+    transition={{ duration: 0.45, ease: "easeOut" }} style={styles.wrap}
     >
+      {/* Theme toggle — fixed top left */}
+      <button
+        type="button"
+        onClick={toggle}
+        style={{
+          position: "fixed", top: 14, left: 16, zIndex: 9999,
+          background: "transparent", border: "none",
+          cursor: "pointer", fontSize: "1.4rem",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          width: 40, height: 40, padding: 0,
+        }}
+      >
+        {isDark ? "☀️" : "🌙"}
+      </button>
       <div style={styles.content}>
-        {/* Header */}
         <div style={styles.header}>
           <div style={styles.title}>📍 {destination}</div>
           <div style={styles.subtitle}>Now let's fill in the details</div>
@@ -793,47 +823,48 @@ function StepDatesAndBudget({
         />
         <div style={styles.stepHint}>We use this to estimate the best transportation methods to your destination.</div>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1.35fr) minmax(0,1fr)", gap: 18 }}>
-        {/* Left: calendar */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <div style={styles.stepTitle}>When are you traveling?</div>
-          <button type="button"
-            style={{ ...styles.dateDisplayBtn, background: inputBg, border: panelBorder }}
-            onClick={() => setShowCal((v) => !v)}
-          >📅 {formatDateRange(dateRange)}</button>
-          <AnimatePresence>
-            {showCal && (
-              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }}
-                exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.22 }}
-                style={{ overflow: "hidden" }}
-              >
-                <div className="calendar-picker" style={{
-                  ...styles.calCard, background: inputBg, border: panelBorder, fontSize: "0.88rem",
-                }}>
-                  <DayPicker mode="range" selected={dateRange} onSelect={handleDateSelect}
-                    month={calMonth} onMonthChange={setCalMonth}
-                    disabled={{ before: new Date() }} showOutsideDays
-                  />
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-        {/* Right: budget */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <div style={styles.stepTitle}>Total budget?</div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <select value={currency} onChange={(e) => setCurrency(e.target.value)}
-              style={{ ...styles.input, background: inputBg, border: panelBorder, flex: "0 0 78px", padding: "12px 6px" }}
-            >{CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}</select>
-            <input type="number" min="1" placeholder="e.g. 3000" value={budget}
-              onChange={(e) => setBudget(e.target.value)}
-              style={{ ...styles.input, background: inputBg, border: panelBorder, flex: 1 }}
-            />
-          </div>
-          <div style={styles.stepHint}>Hotels, food, activities, transport — all included</div>
-        </div>
+      {/* Date button + Budget side by side */}
+<div style={{ display: "grid", gridTemplateColumns: "minmax(0,1.35fr) minmax(0,1fr)", gap: 18 }}>
+  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+    <div style={styles.stepTitle}>When are you traveling?</div>
+    <button type="button"
+      style={{ ...styles.dateDisplayBtn, background: inputBg, border: panelBorder }}
+      onClick={() => setShowCal((v) => !v)}
+    >📅 {formatDateRange(dateRange)}</button>
+  </div>
+  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+    <div style={styles.stepTitle}>Total budget?</div>
+    <div style={{ display: "flex", gap: 8 }}>
+      <select value={currency} onChange={(e) => setCurrency(e.target.value)}
+        style={{ ...styles.input, background: inputBg, border: panelBorder, flex: "0 0 78px", padding: "12px 6px" }}
+      >{CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}</select>
+      <input type="number" min="1" placeholder="e.g. 3000" value={budget}
+        onChange={(e) => setBudget(e.target.value)}
+        style={{ ...styles.input, background: inputBg, border: panelBorder, flex: 1 }}
+      />
+    </div>
+    <div style={styles.stepHint}>Hotels, food, activities, transport — all included</div>
+  </div>
+</div>
+
+{/* Calendar full width below */}
+<AnimatePresence>
+  {showCal && (
+    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }}
+      exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.22 }}
+      style={{ overflow: "hidden" }}
+    >
+      <div className="calendar-picker" style={{
+        ...styles.calCard, background: inputBg, border: panelBorder, fontSize: "0.88rem",
+      }}>
+        <DayPicker mode="range" selected={dateRange} onSelect={handleDateSelect}
+          month={calMonth} onMonthChange={setCalMonth}
+          disabled={{ before: new Date() }} showOutsideDays
+        />
       </div>
+    </motion.div>
+  )}
+</AnimatePresence>
     </div>
   );
 }
@@ -874,7 +905,7 @@ function StepPreferences({ budgetPriorities, togglePriority, activityPrefs, togg
 }
 
 function StepTripDetails({ tripType, setTripType, groupSize, setGroupSize, notes, setNotes }) {
-    const handleTripTypeSelect = (nextTripType) => {
+  const handleTripTypeSelect = (nextTripType) => {
     setTripType(nextTripType);
     setGroupSize(nextTripType === "solo" ? 1 : 2);
   };
@@ -1009,26 +1040,25 @@ const mapStyles = {
 
 const styles = {
   wrap: {
-  display: "flex", flexDirection: "column", alignItems: "center",
-  minHeight: "100vh",
-  width: "100%",
-  padding: "20px 16px 80px",  // increased bottom padding from 16px to 80px
-  boxSizing: "border-box",
-  overflow: "visible",
-},
-content: {
-  display: "flex", flexDirection: "column", alignItems: "center",
-  width: "100%", maxWidth: 860,
-  gap: 12,
-  minHeight: 0,              // remove height: "100%"
-},
+    display: "flex", flexDirection: "column", alignItems: "center",
+    minHeight: "100vh",
+    width: "100%",
+    padding: "20px 16px 80px",
+    boxSizing: "border-box",
+    overflow: "visible",
+  },
+  content: {
+    display: "flex", flexDirection: "column", alignItems: "center",
+    width: "100%", maxWidth: 860,
+    gap: 12,
+    minHeight: 0,
+  },
   header: { textAlign: "center", width: "100%", flexShrink: 0 },
   title: { fontSize: "1.8rem", fontWeight: 900, fontFamily: '"Pixelify Sans", sans-serif', color: "var(--white)" },
   subtitle: { fontSize: "0.9rem", color: "var(--text-muted)", marginTop: 2 },
   dots: { display: "flex", gap: 6, alignItems: "center", justifyContent: "center", flexShrink: 0 },
   dot: { height: 8, borderRadius: 4, transition: "all 0.3s ease" },
-  // cardWrap grows to fill remaining height so StepBox gets the space it needs
-  cardWrap: { width: "100%", minHeight: 0, overflow: "visible" },  // remove flex: 1
+  cardWrap: { width: "100%", minHeight: 0, overflow: "visible" },
   stepLabel: { fontSize: "0.73rem", color: "var(--cal-accent)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" },
   stepTitle: { fontSize: "1.1rem", fontWeight: 700, fontFamily: '"Pixelify Sans", sans-serif', color: "var(--white)" },
   stepHint:  { fontSize: "0.83rem", color: "var(--text-muted)", marginTop: -6 },

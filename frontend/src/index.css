@@ -126,7 +126,7 @@ body {
 
 /* Make DayPicker fill its container */
 .calendar-picker .rdp-root {
-  --rdp-month-caption-font-size: 2.5rem;
+  --rdp-month-caption-font-size: 1.4rem;
   width: 100% !important;
   max-width: 100% !important;
   margin: 0 !important;
@@ -141,19 +141,20 @@ body {
   width: 100% !important;
   table-layout: fixed;
   border-collapse: collapse;
+  border-spacing: 0 1px;
 }
 .calendar-picker .rdp-weekday {
   text-align: center;
-  padding: 6px 0;
+  padding: 4px 0;
 }
 .calendar-picker .rdp-day {
-  min-height: 58px;
+  min-height: 28px;
   text-align: center;
   vertical-align: middle;
 }
 .calendar-picker .rdp-day_button {
-  width: 54px !important;
-  height: 54px !important;
+  width: 28px !important;
+  height: 28px !important;
   min-height: unset !important;
   padding: 0 !important;
   box-sizing: border-box !important;
@@ -206,8 +207,6 @@ body.light select option {
   color: #334455;
 }
 
-
-
 .calendar-picker .rdp-range_start .rdp-day_button,
 .calendar-picker .rdp-range_end .rdp-day_button {
   box-shadow: 0 0 0 2px var(--cal-accent-ring);
@@ -226,9 +225,9 @@ body.light select option {
 .calendar-picker .rdp-today .rdp-day_button {
   border: 2px solid var(--cal-accent);
   border-radius: 50%;
-  width: 54px;
-  height: 54px;
-  min-height: unset;
+  width: 28px !important;
+  height: 28px !important;
+  min-height: unset !important;
   padding: 0 !important;
   box-sizing: border-box !important;
   background-color: var(--cal-accent-bg);
@@ -240,6 +239,7 @@ body.light select option {
   opacity: var(--rdp-outside-opacity);
   color: var(--text-muted);
 }
+
 
 h1 {
   font-size: 3.2em;
