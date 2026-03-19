@@ -445,8 +445,8 @@ function TabBudget({ budget, prefs }) {
           return (
             <div key={item.label} style={styles.budgetRow}>
               <div style={styles.budgetRowLabel}>
-                <span>{item.label}</span>
-                <span style={{ color: "var(--text-muted)" }}>{prefs?.currency} {item.value?.toLocaleString?.() ?? item.value}</span>
+                <span style={styles.budgetRowName}>{item.label}</span>
+                <span style={styles.budgetRowValue}>{prefs?.currency} {item.value?.toLocaleString?.() ?? item.value}</span>
               </div>
               <div style={styles.barTrack}>
                 <motion.div
@@ -559,6 +559,7 @@ const styles = {
     width: "100%",
     maxWidth: 640,
     gap: 16,
+    boxSizing: "border-box",
   },
   header: {
     width: "100%",
@@ -862,6 +863,8 @@ const styles = {
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 20,
+    flexWrap: "wrap",
+    gap: 12
   },
   budgetTotal: {
     fontSize: "1.8rem",
@@ -879,6 +882,9 @@ const styles = {
     borderRadius: 20,
     fontSize: "0.85rem",
     fontWeight: 700,
+    maxWidth: "100%",
+    textAlign: "center",
+    boxSizing: "border-box",
   },
   budgetRow: {
     marginBottom: 14,
@@ -889,6 +895,19 @@ const styles = {
     fontSize: "0.88rem",
     color: "var(--white)",
     marginBottom: 5,
+    alignItems: "flex-start",
+    gap: 12,
+    flexWrap: "wrap",
+  },
+  budgetRowName: {
+    flex: "1 1 180px",
+    minWidth: 0,
+    overflowWrap: "anywhere",
+  },
+  budgetRowValue: {
+    color: "var(--text-muted)",
+    flexShrink: 0,
+    textAlign: "right",
   },
   barTrack: {
     height: 8,
