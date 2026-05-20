@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useIsDarkMode } from "../contexts/ThemeContext";
+import ThemeToggle from "../components/ThemeToggle";
 
 const TABS = ["Overview", "Hotels", "Activities", "Food", "Transportation", "Itinerary", "Budget"];
 
@@ -56,6 +57,7 @@ export default function TripPlan() {
   return (
     <>
       <style>{scrollbarCSS}</style>
+      <ThemeToggle />
       <div className="trip-scroll" style={styles.wrap}>
         <div style={styles.content}>
 
@@ -65,6 +67,19 @@ export default function TripPlan() {
             <div style={styles.destination}>{prefs?.destination || "Your Trip"}</div>
             <div style={styles.dateRow}>
               {prefs?.start_date} → {prefs?.end_date} · {prefs?.group_size} traveler{prefs?.group_size !== 1 ? "s" : ""} · {prefs?.budget?.toLocaleString()} {prefs?.currency}
+              <span style={{
+                marginLeft: 6,
+                padding: "2px 8px",
+                borderRadius: 999,
+                fontSize: "0.72rem",
+                fontWeight: 700,
+                background: prefs?.budget_type === "per_person" ? "rgba(13,148,136,0.15)" : "rgba(139,92,246,0.15)",
+                color: prefs?.budget_type === "per_person" ? "#0d9488" : "#8b5cf6",
+                border: `1px solid ${prefs?.budget_type === "per_person" ? "rgba(13,148,136,0.35)" : "rgba(139,92,246,0.35)"}`,
+                verticalAlign: "middle",
+              }}>
+                {prefs?.budget_type === "per_person" ? "per person" : "total"}
+              </span>
             </div>
           </motion.div>
 
@@ -113,7 +128,7 @@ export default function TripPlan() {
               {activeTab === "Overview"    && <TabOverview plan={plan} prefs={prefs} />}
               {activeTab === "Hotels"      && <TabHotels hotels={plan.hotels || []} currency={prefs?.currency} />}
               {activeTab === "Activities"  && <TabActivities activities={plan.activities || []} currency={prefs?.currency} />}
-              {activeTab === "Food"        && <TabFood foodSpots={plan.food_spots || []} />}
+              {activeTab === "Food"        && <TabFood foodSpots={plan.food_spots || []} destination={prefs?.destination} />}
               {activeTab === "Transportation" && <TabTransportation options={plan.transportation_options || []} currency={prefs?.currency} origin={prefs?.origin} destination={prefs?.destination} />}
               {activeTab === "Itinerary"   && <TabItinerary itinerary={plan.itinerary || []} currency={prefs?.currency} />}
               {activeTab === "Budget"      && <TabBudget budget={plan.budget_breakdown} prefs={prefs} />}
@@ -127,29 +142,45 @@ export default function TripPlan() {
 
 // ─── Overview Tab ─────────────────────────────────────────────────────────────
 function TabOverview({ plan, prefs }) {
+  const destination = prefs?.destination || "";
+  const mapsSearch = (q) =>
+    `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
+
   return (
     <div style={styles.tabContent}>
-      <Card>
-        <p style={styles.overviewText}>{plan.overview}</p>
-        {plan.destination_highlights && (
-          <p style={{ ...styles.overviewText, marginTop: 12, color: "var(--text-muted)" }}>
-            {plan.destination_highlights}
-          </p>
-        )}
-      </Card>
 
-      <SectionRow>
-        {plan.best_neighborhoods?.length > 0 && (
-          <Card title="📍 Best Neighborhoods">
-            {plan.best_neighborhoods.map((n, i) => <Pill key={i}>{n}</Pill>)}
-          </Card>
-        )}
-        {plan.must_try_foods?.length > 0 && (
-          <Card title="🍴 Must-Try Foods">
-            {plan.must_try_foods.map((f, i) => <Pill key={i}>{f}</Pill>)}
-          </Card>
-        )}
-      </SectionRow>
+      {plan.best_neighborhoods?.length > 0 && (
+        <Card title="📍 Best Neighborhoods">
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+            {plan.best_neighborhoods.map((n, i) => (
+              <a
+                key={i}
+                href={mapsSearch(`${n} ${destination}`)}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: "flex", flexDirection: "column", gap: 4,
+                  padding: "10px 14px", borderRadius: 12,
+                  background: "rgba(13,148,136,0.08)",
+                  border: "1px solid rgba(13,148,136,0.25)",
+                  textDecoration: "none", cursor: "pointer",
+                  transition: "background 0.15s", minWidth: 130,
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = "rgba(13,148,136,0.16)"}
+                onMouseLeave={e => e.currentTarget.style.background = "rgba(13,148,136,0.08)"}
+              >
+                <span style={{ color: "var(--text-primary)", fontWeight: 700, fontSize: "0.88rem" }}>
+                  📍 {n}
+                </span>
+                <span style={{ color: "#0d9488", fontSize: "0.7rem", fontWeight: 600, letterSpacing: "0.02em" }}>
+                  Find on Maps ↗
+                </span>
+              </a>
+            ))}
+          </div>
+        </Card>
+      )}
+
 
       {plan.local_tips?.length > 0 && (
         <Card title="💡 Local Tips">
@@ -229,10 +260,7 @@ function TabHotels({ hotels, currency }) {
           <div style={styles.hotelLocation}>📍 {h.location}</div>
           <p style={styles.hotelWhy}>{h.why}</p>
           <div style={{ marginTop: 10 }}>
-            <ResourceLink
-              href={normalizeResourceUrl(h.booking_url, h.name, h.location)}
-              label="View hotel details"
-            />
+            <ResourceLink href={buildSearchUrl(h.name, h.location)} label="Find on Maps" />
           </div>
           {h.amenities?.length > 0 && (
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
@@ -263,10 +291,7 @@ function TabActivities({ activities, currency }) {
             <span>🕐 Best: {a.best_time}</span>
           </div>
           <div style={{ marginTop: 10 }}>
-            <ResourceLink
-              href={normalizeResourceUrl(a.booking_url, a.name)}
-              label="View activity details"
-            />
+            <ResourceLink href={buildSearchUrl(a.name)} label="Find on Maps" />
           </div>
           {a.tags?.length > 0 && (
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
@@ -281,30 +306,70 @@ function TabActivities({ activities, currency }) {
 
 
 // ─── Food Tab ─────────────────────────────────────────────────────────────────
-function TabFood({ foodSpots }) {
+function TabFood({ foodSpots, destination }) {
   if (!foodSpots.length) return <EmptyState>No food recommendations available.</EmptyState>;
   return (
     <div style={styles.tabContent}>
-      {foodSpots.map((spot, i) => (
-        <Card key={i}>
-          <div style={styles.activityHeader}>
-            <div style={styles.activityName}>{spot.name}</div>
-            <Pill accent>{spot.price_level || "Varied pricing"}</Pill>
-          </div>
-          <p style={styles.activityDesc}>{spot.why_popular}</p>
-          <div style={styles.activityMeta}>
-            <span>🍽️ {spot.cuisine}</span>
-            <span>📍 {spot.neighborhood}</span>
-            {spot.review_summary && <span>⭐ {spot.review_summary}</span>}
-          </div>
-          <div style={{ marginTop: 10 }}>
-            <ResourceLink
-              href={normalizeResourceUrl(spot.booking_url, spot.name, spot.neighborhood)}
-              label="View restaurant"
-            />
-          </div>
-        </Card>
-      ))}
+      {foodSpots.map((spot, i) => {
+        const price = spot.avg_price || spot.price_level || null;
+        const mapsUrl = buildSearchUrl(spot.name, spot.neighborhood || destination);
+        return (
+          <Card key={i}>
+            {/* Name + price */}
+            <div style={styles.activityHeader}>
+              <div style={styles.activityName}>{spot.name}</div>
+              {price && (
+                <span style={{
+                  fontSize: "0.78rem", fontWeight: 700, color: "#0d9488",
+                  whiteSpace: "nowrap", background: "rgba(13,148,136,0.12)",
+                  border: "1px solid rgba(13,148,136,0.28)",
+                  borderRadius: 999, padding: "3px 10px", flexShrink: 0,
+                }}>
+                  {price}
+                </span>
+              )}
+            </div>
+
+            {/* Popular dish highlight */}
+            {spot.popular_dish && (
+              <div style={{
+                display: "inline-flex", alignItems: "center", gap: 6,
+                margin: "6px 0 10px",
+                padding: "5px 12px", borderRadius: 8,
+                background: "rgba(139,92,246,0.1)",
+                border: "1px solid rgba(139,92,246,0.25)",
+              }}>
+                <span style={{ fontSize: "0.78rem", color: "rgba(167,139,250,0.7)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Must Order</span>
+                <span style={{ fontSize: "0.88rem", fontWeight: 700, color: "#a78bfa" }}>🍴 {spot.popular_dish}</span>
+              </div>
+            )}
+
+            {/* Description */}
+            <p style={styles.activityDesc}>{spot.why_popular}</p>
+
+            {/* Critic quote */}
+            {spot.review_summary && (
+              <p style={{
+                margin: "8px 0 12px", fontStyle: "italic",
+                fontSize: "0.84rem", color: "var(--text-secondary)",
+                borderLeft: "2px solid rgba(13,148,136,0.45)", paddingLeft: 10,
+              }}>
+                "{spot.review_summary}"
+              </p>
+            )}
+
+            {/* Meta row */}
+            <div style={styles.activityMeta}>
+              <span>🍽️ {spot.cuisine}</span>
+              <span>📍 {spot.neighborhood}</span>
+            </div>
+
+            <div style={{ marginTop: 10 }}>
+              <ResourceLink href={mapsUrl} label="Find on Maps" />
+            </div>
+          </Card>
+        );
+      })}
     </div>
   );
 }
@@ -419,16 +484,26 @@ function TabBudget({ budget, prefs }) {
     { label: "🎭 Activities",      value: budget.activities_total,    color: "#8b5cf6" },
     { label: "🍽️ Food",            value: budget.food_total,          color: "#f59e0b" },
     { label: "🚗 Transport",       value: budget.transport_total,     color: "#3b82f6" },
-    { label: "🛍️ Shopping & Misc", value: budget.shopping_misc_total, color: "#ec4899" },
+    { label: "🛍️ Shopping, Miscellaneous & Incidentals", value: budget.shopping_misc_total, color: "#ec4899" },
   ].filter((i) => i.value > 0);
 
   return (
     <div style={styles.tabContent}>
       <Card title="Budget Breakdown">
         <div style={styles.budgetSummary}>
-          <div>
-            <div style={styles.budgetTotal}>{prefs?.currency} {budget.grand_total?.toLocaleString?.() ?? budget.grand_total}</div>
-            <div style={styles.budgetLabel}>Estimated Total</div>
+          <div style={{ display: "flex", gap: 24, alignItems: "flex-end", flexWrap: "wrap" }}>
+            <div>
+              <div style={styles.budgetTotal}>{prefs?.currency} {budget.grand_total?.toLocaleString?.() ?? budget.grand_total}</div>
+              <div style={styles.budgetLabel}>Total · {prefs?.group_size ?? 1} traveler{(prefs?.group_size ?? 1) !== 1 ? "s" : ""}</div>
+            </div>
+            {prefs?.group_size > 1 && (
+              <div>
+                <div style={{ ...styles.budgetTotal, fontSize: "1.3rem", color: "var(--text-secondary)" }}>
+                  {prefs?.currency} {Math.round((budget.grand_total ?? 0) / prefs.group_size).toLocaleString()}
+                </div>
+                <div style={styles.budgetLabel}>Per person</div>
+              </div>
+            )}
           </div>
           <div style={{
             ...styles.budgetBadge,
@@ -470,17 +545,34 @@ function TabBudget({ budget, prefs }) {
 
       {prefs?.budget && (
         <Card title="Budget vs. Estimate">
-          <div style={styles.budgetCompare}>
-            <CompareRow label="Your Budget" value={prefs.budget} currency={prefs.currency} color="var(--cal-accent)" />
-            <CompareRow label="AI Estimate" value={budget.grand_total} currency={prefs.currency} color={budget.within_budget ? "#10b981" : "#ef4444"} />
-            <div style={styles.divider} />
-            <CompareRow
-              label={budget.within_budget ? "Remaining" : "Overage"}
-              value={Math.abs(prefs.budget - budget.grand_total)}
-              currency={prefs.currency}
-              color={budget.within_budget ? "#10b981" : "#ef4444"}
-            />
-          </div>
+          {(() => {
+            const groupSize = prefs.group_size ?? 1;
+            const enteredTotal = prefs.budget_type === "per_person"
+              ? prefs.budget * groupSize
+              : prefs.budget;
+            const enteredPerPerson = prefs.budget_type === "per_person"
+              ? prefs.budget
+              : prefs.budget / groupSize;
+            const estimateTotal = budget.grand_total ?? 0;
+            const estimatePerPerson = estimateTotal / groupSize;
+            const diff = enteredTotal - estimateTotal;
+            return (
+              <div style={styles.budgetCompare}>
+                <CompareRow label="Your Budget (total)" value={enteredTotal} currency={prefs.currency} color="var(--cal-accent)" />
+                {groupSize > 1 && <CompareRow label="Your Budget (per person)" value={Math.round(enteredPerPerson)} currency={prefs.currency} color="var(--cal-accent)" dim />}
+                <div style={styles.divider} />
+                <CompareRow label="AI Estimate (total)" value={estimateTotal} currency={prefs.currency} color={budget.within_budget ? "#10b981" : "#ef4444"} />
+                {groupSize > 1 && <CompareRow label="AI Estimate (per person)" value={Math.round(estimatePerPerson)} currency={prefs.currency} color={budget.within_budget ? "#10b981" : "#ef4444"} dim />}
+                <div style={styles.divider} />
+                <CompareRow
+                  label={diff >= 0 ? "Remaining" : "Overage"}
+                  value={Math.abs(Math.round(diff))}
+                  currency={prefs.currency}
+                  color={diff >= 0 ? "#10b981" : "#ef4444"}
+                />
+              </div>
+            );
+          })()}
         </Card>
       )}
     </div>
@@ -529,11 +621,11 @@ function EmptyState({ children }) {
   return <div style={styles.emptyState}>{children}</div>;
 }
 
-function CompareRow({ label, value, currency, color }) {
+function CompareRow({ label, value, currency, color, dim }) {
   return (
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0" }}>
-      <span style={{ color: "var(--text-muted)", fontSize: "0.9rem" }}>{label}</span>
-      <span style={{ color, fontWeight: 700, fontFamily: '"Pixelify Sans", sans-serif', fontSize: "1rem" }}>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: dim ? "3px 0" : "6px 0", opacity: dim ? 0.65 : 1 }}>
+      <span style={{ color: "var(--text-muted)", fontSize: dim ? "0.8rem" : "0.9rem" }}>{label}</span>
+      <span style={{ color, fontWeight: dim ? 500 : 700, fontFamily: dim ? "inherit" : '"Pixelify Sans", sans-serif', fontSize: dim ? "0.85rem" : "1rem" }}>
         {currency} {value?.toLocaleString?.() ?? value}
       </span>
     </div>
@@ -557,7 +649,7 @@ const styles = {
     flexDirection: "column",
     alignItems: "center",
     width: "100%",
-    maxWidth: 640,
+    maxWidth: 860,
     gap: 16,
   },
   header: {
@@ -718,13 +810,12 @@ const styles = {
     marginLeft: 12,
   },
   priceAmount: {
-    fontSize: "1.1rem",
-    fontWeight: 700,
-    color: "var(--cal-accent-fg)",
-    fontFamily: '"Pixelify Sans", sans-serif',
+    fontSize: "0.92rem",
+    fontWeight: 500,
+    color: "var(--text-secondary)",
   },
   priceLabel: {
-    fontSize: "0.75rem",
+    fontSize: "0.72rem",
     color: "var(--text-muted)",
   },
   hotelLocation: {

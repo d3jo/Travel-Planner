@@ -27,16 +27,6 @@ export default function TitleBar() {
           WebkitAppRegion: hasElectronWindowControls ? "drag" : "initial",
         }}
       >
-        <button
-          type="button"
-          style={styles.themeBtn}
-          onClick={toggle}
-          title={isDark ? "Switch to light mode" : "Switch to dark mode"}
-          aria-label="Toggle theme"
-        >
-          {isDark ? "☀️" : "🌙"}
-        </button>
-
         <div
           style={{
             ...styles.dragRegion,

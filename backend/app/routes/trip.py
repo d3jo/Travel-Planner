@@ -22,6 +22,7 @@ class TripPreferences(BaseModel):
     activity_preferences: List[str] = Field(default_factory=list)
     trip_type: str = "solo"
     group_size: int = 1
+    budget_type: str = "total"
     additional_notes: Optional[str] = None
 
 

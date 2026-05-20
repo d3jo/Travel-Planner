@@ -5,7 +5,8 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ComposableMap, Geographies, Geography, ZoomableGroup, Marker as MapMarker } from "react-simple-maps";
 import "react-day-picker/dist/style.css";
 import api from "../api";
-import { useIsDarkMode } from "../contexts/ThemeContext";
+import { useIsDarkMode, useTheme } from "../contexts/ThemeContext";
+import ThemeToggle from "../components/ThemeToggle";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const TOTAL_STEPS = 3;
@@ -14,7 +15,7 @@ const BUDGET_PRIORITIES = [
   { id: "hotels",        label: "🏨 Hotels" },
   { id: "activities",    label: "🎭 Activities" },
   { id: "food",          label: "🍽️ Food & Dining" },
-  { id: "transport",     label: "🚗 Transport" },
+  { id: "transport",     label: "🚗 Transportation" },
   { id: "shopping",      label: "🛍️ Shopping" },
   { id: "entertainment", label: "🎵 Entertainment" },
 ];
@@ -82,6 +83,106 @@ function formatDateRange(range) {
   if (!range.to) return fmt(range.from) + " → ?";
   const nights = Math.round((range.to - range.from) / 86400000);
   return `${fmt(range.from)} → ${fmt(range.to)} (${nights} night${nights !== 1 ? "s" : ""})`;
+}
+
+// ─── Location Input (origin, dropdown-only) ──────────────────────────────────
+function LocationInput({ value, onChange, placeholder, inputStyle: style, isDarkMode }) {
+  const [query, setQuery] = useState(value || "");
+  const [confirmed, setConfirmed] = useState(!!value);
+  const [suggestions, setSuggestions] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const timerRef = useRef(null);
+
+  const search = useCallback((q) => {
+    if (!q.trim() || q.length < 2) { setSuggestions([]); return; }
+    clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(async () => {
+      setLoading(true);
+      try {
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=5&addressdetails=1`,
+          { headers: { "Accept-Language": "en" } }
+        );
+        setSuggestions(await res.json());
+      } catch { setSuggestions([]); }
+      finally { setLoading(false); }
+    }, 350);
+  }, []);
+
+  const pick = (item) => {
+    const name = item.display_name.split(",").slice(0, 3).join(", ").trim();
+    setQuery(name);
+    setConfirmed(true);
+    onChange(name);
+    setSuggestions([]);
+  };
+
+  const handleEdit = (val) => {
+    setQuery(val);
+    setConfirmed(false);
+    onChange("");
+    search(val);
+  };
+
+  const listBg     = isDarkMode ? "rgba(12,12,20,0.97)" : "rgba(255,249,240,0.98)";
+  const listBorder = isDarkMode ? "1px solid rgba(255,255,255,0.12)" : "1px solid rgba(168,207,223,0.3)";
+  const hoverBg    = isDarkMode ? "rgba(13,148,136,0.18)" : "rgba(168,207,223,0.2)";
+  const textColor  = isDarkMode ? "rgba(255,255,255,0.88)" : "rgba(51,68,85,0.9)";
+  const borderColor = confirmed ? "1px solid #0d9488" : style?.border;
+
+  return (
+    <div style={{ position: "relative" }}>
+      <div style={{ position: "relative" }}>
+        <input
+          type="text"
+          placeholder={placeholder}
+          value={query}
+          onChange={(e) => handleEdit(e.target.value)}
+          style={{ ...style, border: borderColor }}
+        />
+        <span style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", fontSize: "0.85rem", pointerEvents: "none" }}>
+          {loading ? "⏳" : confirmed ? "✓" : ""}
+        </span>
+      </div>
+      <AnimatePresence>
+        {suggestions.length > 0 && (
+          <motion.ul
+            initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.15 }}
+            style={{
+              position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0,
+              background: listBg, border: listBorder,
+              backdropFilter: "blur(20px)", borderRadius: 10, padding: "6px 0",
+              margin: 0, listStyle: "none", zIndex: 2000,
+              boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
+            }}
+          >
+            {suggestions.map((s) => (
+              <li key={s.place_id}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => pick(s)}
+                style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 14px", cursor: "pointer", borderRadius: 6, margin: "0 4px", transition: "background 0.15s" }}
+                onMouseEnter={(e) => e.currentTarget.style.background = hoverBg}
+                onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
+              >
+                <span style={{ fontSize: "0.9rem" }}>
+                  {s.type === "country" ? "🌍" : s.addresstype === "city" || s.type === "city" ? "🏙️" : "📍"}
+                </span>
+                <span style={{ fontSize: "0.88rem", color: textColor, lineHeight: 1.3 }}>
+                  {s.display_name.split(",").slice(0, 3).join(", ")}
+                </span>
+              </li>
+            ))}
+          </motion.ul>
+        )}
+      </AnimatePresence>
+      {!confirmed && query.length > 0 && !loading && suggestions.length === 0 && (
+        <div style={{ fontSize: "0.78rem", color: "#f87171", marginTop: 4 }}>
+          Please select a location from the dropdown.
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ─── Map Search Bar ───────────────────────────────────────────────────────────
@@ -397,7 +498,10 @@ function MapPhase({ onConfirm }) {
             boxShadow: isDarkMode ? "0 8px 40px rgba(0,0,0,0.5)" : "0 4px 16px rgba(168,207,223,0.15)",
           }}
         >
-          <div style={mapStyles.appName}>✈️ Trip Planner AI</div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div style={mapStyles.appName}>✈️ Trip Planner AI</div>
+            <ThemeToggle />
+          </div>
           <div style={{ ...mapStyles.heroTitle, color: isDarkMode ? "#fff" : "#334455" }}>Where do you want to go?</div>
           <div style={{ ...mapStyles.heroHint, color: isDarkMode ? "rgba(255,255,255,0.45)" : "rgba(100,120,140,0.6)" }}>
             Search or click a country on the map
@@ -617,6 +721,7 @@ export default function Wizard() {
   const [calMonth, setCalMonth]   = useState(() => { const d = new Date(); d.setDate(1); return d; });
 
   const [budget, setBudget]       = useState("");
+  const [budgetType, setBudgetType] = useState("total");
   const [currency, setCurrency]   = useState("CAD");
   const [budgetPriorities, setBudgetPriorities] = useState([]);
   const [activityPrefs, setActivityPrefs]       = useState([]);
@@ -659,7 +764,7 @@ const handleSubmit = async () => {
       destination: destination.trim(),
       start_date: toYYYYMMDD(dateRange.from),
       end_date: toYYYYMMDD(dateRange.to),
-      budget: Number(budget), currency,
+      budget: Number(budget), currency, budget_type: budgetType,
       budget_priorities: budgetPriorities,
       activity_preferences: activityPrefs,
       trip_type: tripType, group_size: Number(groupSize),
@@ -702,6 +807,7 @@ const handleSubmit = async () => {
     <motion.div key="form" initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.45, ease: "easeOut" }} style={styles.wrap}
     >
+      <ThemeToggle />
       <div style={styles.content}>
         {/* Header */}
         <div style={styles.header}>
@@ -729,6 +835,8 @@ const handleSubmit = async () => {
                     calMonth={calMonth} setCalMonth={setCalMonth}
                     origin={origin} setOrigin={setOrigin}
                     budget={budget} setBudget={setBudget}
+                    budgetType={budgetType} setBudgetType={setBudgetType}
+                    groupSize={groupSize}
                     currency={currency} setCurrency={setCurrency}
                   />
                 </StepBox>
@@ -765,11 +873,22 @@ const handleSubmit = async () => {
 
 function StepDatesAndBudget({
   origin, setOrigin, dateRange, setDateRange, showCal, setShowCal, calMonth, setCalMonth,
-  budget, setBudget, currency, setCurrency,
+  budget, setBudget, budgetType, setBudgetType, groupSize, currency, setCurrency,
 }) {
   const isDarkMode = useIsDarkMode();
   const inputBg     = isDarkMode ? "rgba(255,255,255,0.04)" : "rgba(168,207,223,0.12)";
   const panelBorder = isDarkMode ? "1px solid rgba(255,255,255,0.12)" : "1px solid rgba(168,207,223,0.35)";
+
+  const numBudget = Number(budget) || 0;
+  const numGroup  = Number(groupSize) || 1;
+  const equivalentLabel = (() => {
+    if (!numBudget) return null;
+    if (budgetType === "per_person" && numGroup > 1)
+      return `= ${currency} ${(numBudget * numGroup).toLocaleString()} total for ${numGroup} people`;
+    if (budgetType === "total" && numGroup > 1)
+      return `= ${currency} ${(numBudget / numGroup).toLocaleString(undefined, { maximumFractionDigits: 0 })} per person`;
+    return null;
+  })();
 
   const handleDateSelect = (_range, selectedDay) => {
     if (!selectedDay) return;
@@ -799,27 +918,54 @@ function StepDatesAndBudget({
       <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1.4fr) minmax(0,1fr)", gap: 10 }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           <div style={styles.stepTitle}>Where are you traveling from?</div>
-          <input
-            type="text"
-            placeholder="e.g. Toronto, Canada"
+          <LocationInput
             value={origin}
-            onChange={(e) => setOrigin(e.target.value)}
-            style={{ ...styles.input, background: inputBg, border: panelBorder }}
+            onChange={setOrigin}
+            placeholder="e.g. Toronto, Canada"
+            inputStyle={{ ...styles.input, background: inputBg, border: panelBorder }}
+            isDarkMode={isDarkMode}
           />
-          <div style={styles.stepHint}>We use this to estimate the best transportation methods.</div>
+          <div style={styles.stepHint}>Select a location from the dropdown to confirm.</div>
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          <div style={styles.stepTitle}>Total budget?</div>
+          <div style={styles.stepTitle}>Budget</div>
+
+          {/* Per person / Total toggle */}
+          <div style={{ display: "flex", borderRadius: 10, overflow: "hidden", border: panelBorder }}>
+            {[
+              { id: "per_person", label: "Per Person" },
+              { id: "total",      label: "Total for Group" },
+            ].map(({ id, label }) => (
+              <button key={id} type="button" onClick={() => setBudgetType(id)} style={{
+                flex: 1, padding: "9px 6px",
+                background: budgetType === id ? "var(--cal-accent)" : "transparent",
+                color: budgetType === id ? "#fff" : isDarkMode ? "rgba(255,255,255,0.5)" : "rgba(100,120,140,0.7)",
+                border: "none", cursor: "pointer",
+                fontSize: "0.8rem", fontWeight: 700,
+                fontFamily: '"Pixelify Sans", sans-serif',
+                transition: "background 0.2s, color 0.2s",
+              }}>{label}</button>
+            ))}
+          </div>
+
           <div style={{ display: "flex", gap: 8 }}>
             <select value={currency} onChange={(e) => setCurrency(e.target.value)}
               style={{ ...styles.input, background: inputBg, border: panelBorder, flex: "0 0 78px", padding: "12px 6px" }}
             >{CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}</select>
-            <input type="number" min="1" placeholder="e.g. 3000" value={budget}
+            <input type="number" min="1"
+              placeholder={budgetType === "per_person" ? "e.g. 1500" : "e.g. 3000"}
+              value={budget}
               onChange={(e) => setBudget(e.target.value)}
               style={{ ...styles.input, background: inputBg, border: panelBorder, flex: 1 }}
             />
           </div>
+
+          {equivalentLabel && (
+            <div style={{ fontSize: "0.78rem", color: "var(--cal-accent)", fontWeight: 600 }}>
+              {equivalentLabel}
+            </div>
+          )}
           <div style={styles.stepHint}>Hotels, food, activities, transport — all included</div>
         </div>
       </div>

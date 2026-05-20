@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.routes.trip import router as trip_router
+from app.routes.photos import router as photos_router
 
 
 def _cors_origins() -> list[str]:
@@ -43,6 +44,7 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(trip_router)
+    app.include_router(photos_router)
 
     @app.get("/health")
     def health():

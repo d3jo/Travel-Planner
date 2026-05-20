@@ -61,7 +61,7 @@ def _default_trip_plan(raw_text: str) -> Dict[str, Any]:
         "destination_highlights": "",
         "hotels": [],
         "activities": [],
-        "food_spots": [],
+        "food_spots": [],  # each: {name, cuisine, avg_price, neighborhood, popular_dish, why_popular, review_summary}
         "transportation_options": [],
         "itinerary": [],
         "budget_breakdown": {
@@ -124,7 +124,11 @@ def generate_trip_plan(preferences: Dict[str, Any]) -> Dict[str, Any]:
     activity_preferences = preferences.get("activity_preferences", [])
     trip_type = preferences.get("trip_type", "solo")
     group_size = preferences.get("group_size", 1)
+    budget_type = preferences.get("budget_type", "total")
     additional_notes = preferences.get("additional_notes", "")
+
+    effective_total = budget * group_size if budget_type == "per_person" else budget
+    per_person = budget if budget_type == "per_person" else (budget / max(group_size, 1))
 
     # Compute number of nights
     try:
@@ -135,53 +139,66 @@ def generate_trip_plan(preferences: Dict[str, Any]) -> Dict[str, Any]:
     except Exception:
         nights = 5
 
+    # Map user-facing priority labels to budget_breakdown keys
+    _priority_map = {
+        "hotels": "hotels_total", "hotel": "hotels_total",
+        "activities": "activities_total", "activity": "activities_total",
+        "food": "food_total", "food & dining": "food_total", "dining": "food_total",
+        "transportation": "transport_total", "transport": "transport_total",
+        "shopping": "shopping_misc_total", "entertainment": "activities_total",
+    }
+    priority_allocation = ", ".join(
+        f"#{i+1} {p} → boost {_priority_map.get(p.lower().strip(), p.lower())}"
+        for i, p in enumerate(budget_priorities)
+    ) if budget_priorities else "no specific priorities"
+
     instructions = (
-        "You are an expert luxury and budget travel planner. "
-        "Given trip preferences, generate a comprehensive, realistic, and exciting trip plan. "
-        "Output STRICT JSON only — no markdown fences, no extra text, just the JSON object. "
-        "The JSON must match this exact schema:\n"
-        "{\n"
-        '  "overview": string,\n'
-        '  "destination_highlights": string,\n'
-        '  "hotels": [\n'
-        '    {"name": string, "type": string, "stars": number, "price_per_night": number, "location": string, "why": string, "amenities": [string], "booking_url": string}\n'
-        '  "activities": [\n'
-        '    {"name": string, "category": string, "cost_per_person": number, "duration": string, "description": string, "best_time": string, "tags": [string], "booking_url": string}\n'
-        "  ],\n"
-        '  "food_spots": [\n'
-        '    {"name": string, "cuisine": string, "price_level": string, "neighborhood": string, "why_popular": string, "review_summary": string, "booking_url": string}\n'
-        '  "itinerary": [\n'
-        '    {"day": number, "date": string, "theme": string, "morning": string, "afternoon": string, "evening": string, "meals": {"breakfast": string, "lunch": string, "dinner": string}, "estimated_daily_cost": number}\n'
-        "  ],\n"
-        '  "budget_breakdown": {"hotels_total": number, "activities_total": number, "food_total": number, "transport_total": number, "shopping_misc_total": number, "grand_total": number, "within_budget": boolean, "savings_tip": string},\n'
-        '  "local_tips": [string],\n'
-        '  "best_neighborhoods": [string],\n'
-        '  "must_try_foods": [string],\n'
-        '  "weather_note": string,\n'
-        '  "currency_note": string\n'
-        "}\n"
-        f"Generate EXACTLY {nights} itinerary days (day 1 through {nights}). "
-        "Recommend EXACTLY 5 hotels and 8-10 activities. Include EXACTLY 10 food_spots. "
-        "For hotels, include a clear mix of 4-5 star luxury and budget-friendly options, tuned to budget priorities and notes. "
-        "If user priorities favor hotels or luxury, bias toward more premium stays. If they favor savings, include stronger budget options. "
-        "All prices in the user's currency. Use real place names and provide valid, direct URLs in booking_url for hotels, activities, and food_spots. "
-        "Actively incorporate additional notes into hotels, activities, food recommendations, and itinerary themes."
+        "You are an expert travel planner. Output STRICT JSON only — no markdown fences, no extra text.\n"
+        "JSON schema (field: type):\n"
+        '{"overview": string, "destination_highlights": string,\n'
+        ' "hotels": [{"name": string, "type": string, "stars": number, "price_per_night": number, "location": string, "why": string, "amenities": [string], "booking_url": string}],\n'
+        ' "activities": [{"name": string, "category": string, "cost_per_person": number, "duration": string, "description": string, "best_time": string, "tags": [string], "booking_url": string}],\n'
+        ' "food_spots": [{"name": string, "cuisine": string, "avg_price": string, "neighborhood": string, "popular_dish": string, "why_popular": string, "review_summary": string, "booking_url": string}],\n'
+        ' "itinerary": [{"day": number, "date": string, "theme": string, "morning": string, "afternoon": string, "evening": string, "meals": {"breakfast": string, "lunch": string, "dinner": string}, "estimated_daily_cost": number}],\n'
+        ' "budget_breakdown": {"hotels_total": number, "activities_total": number, "food_total": number, "transport_total": number, "shopping_misc_total": number, "grand_total": number, "within_budget": boolean, "savings_tip": string},\n'
+        ' "transportation_options": [{"mode": string, "estimated_cost_per_group": number, "duration": string, "why": string, "notes": string}],\n'
+        ' "local_tips": [string], "best_neighborhoods": [string], "must_try_foods": [{"type": string, "dish": string}], "weather_note": string, "currency_note": string}\n'
+        f"Generate EXACTLY {nights} itinerary days, 5 hotels, 8-10 activities, 10 food_spots, 8-10 must_try_foods. "
+        "All prices in user's currency. Use real place names. "
+        "food_spots.avg_price: number range e.g. '~CAD 18–30/person'. "
+        "food_spots.popular_dish: single signature dish. "
+        "food_spots.why_popular: 2–3 vivid sentences on atmosphere and must-orders. "
+        "food_spots.review_summary: one punchy critic line. "
+        "must_try_foods.type: cuisine/restaurant category. must_try_foods.dish: signature dish. "
+        "weather_note: 2–3 sentences with temp in °C and °F, conditions, what to pack. "
+        "budget_breakdown totals = TOTAL GROUP SPEND. grand_total = exact sum of five categories. "
+        f"Budget allocation — user priorities in order: {priority_allocation}. "
+        "Default ranges: hotels 30–40%, activities 20–25%, food 12–18%, transport 8–12%, shopping_misc 15–20%. "
+        "Shift 5–10% extra toward top-ranked priorities, reduce lower-ranked ones. "
+        "shopping_misc covers Uber, metro, snacks, coffee, tips, souvenirs — never below 12%."
     )
 
     user_input = (
         f"DESTINATION: {destination}\n"
         f"TRAVEL DATES: {start_date} to {end_date} ({nights} nights)\n"
-        f"TOTAL BUDGET: {budget} {currency}\n"
+        f"BUDGET (as entered): {budget} {currency} {'per person' if budget_type == 'per_person' else 'total for the group'}\n"
+        f"EFFECTIVE TOTAL BUDGET: {effective_total:.2f} {currency} (for all {group_size} travelers)\n"
+        f"PER-PERSON BUDGET: {per_person:.2f} {currency}\n"
         f"BUDGET PRIORITIES (most important first): {', '.join(budget_priorities)}\n"
         f"ACTIVITY PREFERENCES: {', '.join(activity_preferences)}\n"
         f"TRIP TYPE: {trip_type}\n"
         f"GROUP SIZE: {group_size} person(s)\n"
         f"ADDITIONAL NOTES: {additional_notes or 'None'}\n\n"
-        "Generate a complete trip plan as JSON."
+        "Generate a complete trip plan as JSON. Use EFFECTIVE TOTAL BUDGET for all budget_breakdown totals."
     )
 
-    raw = _responses_text(instructions=instructions, user_input=user_input, max_output_tokens=3000)
-    return _parse_trip_plan_payload(raw)
+    raw = _responses_text(instructions=instructions, user_input=user_input, max_output_tokens=5000)
+    print("=== LLM RAW (first 200) ===", raw[:200])
+    result = _parse_trip_plan_payload(raw)
+    print("=== PARSED KEYS ===", {k: (len(v) if isinstance(v, list) else type(v).__name__) for k, v in result.items() if k not in ("_raw",)})
+    if result.get("_parse_error"):
+        print("=== PARSE FAILED — raw tail ===", raw[-300:])
+    return result
 
 
 
