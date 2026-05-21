@@ -427,13 +427,23 @@ function MapPhase({ onConfirm }) {
   const handleZoom = (delta) =>
     setPosition((prev) => constrain({ ...prev, zoom: prev.zoom + delta }));
 
+  const mapRef = useRef(null);
+  useEffect(() => {
+    const el = mapRef.current;
+    if (!el) return;
+    const handler = (e) => { if (e.ctrlKey) e.preventDefault(); };
+    el.addEventListener("wheel", handler, { passive: false });
+    return () => el.removeEventListener("wheel", handler);
+  }, []);
+
   return (
-    <div style={{ ...mapStyles.wrap, background: mapBg }}>
+    <div ref={mapRef} style={{ ...mapStyles.wrap, background: mapBg }}>
       <ComposableMap projection="geoMercator" projectionConfig={{ scale: 145 }}
         style={{ width: "100%", height: "100%", background: mapBg }}
       >
         <ZoomableGroup center={position.coordinates} zoom={position.zoom}
           onMoveEnd={(pos) => setPosition(constrain(pos))} minZoom={1.8} maxZoom={12}
+          filterZoomEvent={(e) => !e.button}
         >
           <Geographies geography={GEO_URL}>
             {({ geographies }) => geographies.map((geo) => (
