@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useIsDarkMode } from "../contexts/ThemeContext";
 import ThemeToggle from "../components/ThemeToggle";
 
-const TABS = ["Overview", "Hotels", "Activities", "Food", "Transportation", "Itinerary", "Budget"];
+const TABS = ["Overview", "Hotels", "Experiences", "Food", "Transportation", "Itinerary", "Budget"];
 
 // Inject custom scrollbar styles once
 const scrollbarCSS = `
@@ -127,7 +127,7 @@ export default function TripPlan() {
             >
               {activeTab === "Overview"    && <TabOverview plan={plan} prefs={prefs} />}
               {activeTab === "Hotels"      && <TabHotels hotels={plan.hotels || []} currency={prefs?.currency} />}
-              {activeTab === "Activities"  && <TabActivities activities={plan.activities || []} currency={prefs?.currency} />}
+              {activeTab === "Experiences"  && <TabActivities activities={plan.activities || []} currency={prefs?.currency} />}
               {activeTab === "Food"        && <TabFood foodSpots={plan.food_spots || []} destination={prefs?.destination} />}
               {activeTab === "Transportation" && <TabTransportation options={plan.transportation_options || []} currency={prefs?.currency} origin={prefs?.origin} destination={prefs?.destination} overrideNote={plan._transport_override} />}
               {activeTab === "Itinerary"   && <TabItinerary itinerary={plan.itinerary || []} currency={prefs?.currency} />}
@@ -437,19 +437,90 @@ function TabTransportation({ options, currency, origin, destination, overrideNot
           <p style={styles.noteText}>From <strong>{origin || "your location"}</strong> to <strong>{destination || "your destination"}</strong></p>
         </Card>
       )}
-      {options.map((opt, i) => (
-        <Card key={i}>
-          <div style={styles.activityHeader}>
-            <div style={styles.activityName}>🚗 {opt.mode}</div>
-            <Pill accent>Est. {currency} {opt.estimated_cost_per_group?.toLocaleString?.() ?? opt.estimated_cost_per_group}</Pill>
-          </div>
-          <div style={styles.activityMeta}>
-            <span>⏱️ {opt.duration}</span>
-          </div>
-          <p style={styles.activityDesc}>{opt.why}</p>
-          {opt.notes && <p style={{ ...styles.noteText, marginTop: 6 }}>{opt.notes}</p>}
-        </Card>
-      ))}
+      {options.map((opt, i) => {
+        const typeStr = opt.type || opt.mode || "";
+        const cabinStr = opt.cabin || opt.class || "";
+        const modeIcon = /train|rail|euro|shinkansen/i.test(typeStr) ? "🚄"
+          : /bus|coach/i.test(typeStr) ? "🚌"
+          : /car|drive|rental/i.test(typeStr) ? "🚗"
+          : /ferry|boat|ship/i.test(typeStr) ? "⛴️"
+          : "✈️";
+        const cabinColor = /first/i.test(cabinStr) ? "#f59e0b"
+          : /business/i.test(cabinStr) ? "#8b5cf6"
+          : /premium/i.test(cabinStr) ? "#3b82f6"
+          : "var(--text-muted)";
+
+        // Support both new structured priceEstimate and legacy estimated_cost_per_group
+        const pe = opt.priceEstimate;
+        const priceCurrency = pe?.currency || currency;
+        const priceDisplay = pe
+          ? `${priceCurrency} ${pe.min?.toLocaleString()} – ${pe.max?.toLocaleString()}`
+          : opt.estimated_cost_per_group != null
+            ? `${currency} ${Number(opt.estimated_cost_per_group).toLocaleString()}`
+            : null;
+        const confidence = pe?.confidence;
+        const confidenceColor = confidence === "high" ? "#4ade80"
+          : confidence === "medium" ? "#f59e0b"
+          : "#f87171";
+
+        const notesList = Array.isArray(opt.notes)
+          ? opt.notes
+          : opt.notes ? [opt.notes] : [];
+
+        return (
+          <Card key={i}>
+            {/* Header: type + price range */}
+            <div style={styles.activityHeader}>
+              <div style={styles.activityName}>{modeIcon} {typeStr}</div>
+              {priceDisplay && (
+                <span style={{
+                  fontSize: "0.85rem", fontWeight: 700, padding: "4px 12px", borderRadius: 999,
+                  background: "rgba(13,148,136,0.12)", border: "1px solid rgba(13,148,136,0.35)",
+                  color: "var(--cal-accent)", whiteSpace: "nowrap",
+                }}>
+                  Est. {priceDisplay}
+                </span>
+              )}
+            </div>
+
+            {/* Cabin badge + duration + confidence */}
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+              {cabinStr && (
+                <span style={{
+                  fontSize: "0.78rem", fontWeight: 700, padding: "3px 10px", borderRadius: 999,
+                  background: `${cabinColor}18`, border: `1px solid ${cabinColor}55`, color: cabinColor,
+                }}>
+                  {cabinStr}
+                </span>
+              )}
+              {(opt.durationEstimate || opt.duration) && (
+                <span style={{ fontSize: "0.82rem", color: "var(--text-muted)" }}>
+                  ⏱️ {opt.durationEstimate || opt.duration}
+                </span>
+              )}
+              {confidence && (
+                <span style={{ fontSize: "0.75rem", color: confidenceColor, fontWeight: 600 }}>
+                  ● {confidence} confidence
+                </span>
+              )}
+            </div>
+
+            {/* Why */}
+            {opt.why && <p style={{ ...styles.activityDesc, marginBottom: 8 }}>{opt.why}</p>}
+
+            {/* Notes list */}
+            {notesList.length > 0 && (
+              <ul style={{ margin: 0, padding: "0 0 0 16px", display: "flex", flexDirection: "column", gap: 3 }}>
+                {notesList.map((n, j) => (
+                  <li key={j} style={{ fontSize: "0.8rem", color: "var(--text-muted)", fontStyle: "italic", lineHeight: 1.5 }}>
+                    {n}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+        );
+      })}
     </div>
   );
 }
@@ -626,14 +697,14 @@ function TabBudget({ budget, prefs }) {
 
   const items = [
     { key: "hotels",   label: "🏨 Hotels",         value: budget.hotels_total,        color: "#0d9488" },
-    { key: "activities", label: "🎭 Activities",    value: budget.activities_total,    color: "#8b5cf6" },
+    { key: "activities", label: "🎭 Experiences & Attractions", value: budget.activities_total, color: "#8b5cf6" },
     { key: "food",     label: "🍽️ Food",            value: budget.food_total,          color: "#f59e0b" },
     { key: "transport",label: "🚗 Transportation",   value: budget.transport_total,     color: "#3b82f6" },
     { key: "shopping", label: "🛍️ Shopping, Miscellaneous & Incidentals", value: budget.shopping_misc_total, color: "#ec4899" },
   ].filter((i) => i.value > 0);
 
   const PRIORITY_LABELS = {
-    hotels: "🏨 Hotels", activities: "🎭 Activities", food: "🍽️ Food & Dining",
+    hotels: "🏨 Hotels", activities: "🎭 Experiences & Attractions", food: "🍽️ Food & Dining",
     transport: "🚗 Transportation", shopping: "🛍️ Shopping", entertainment: "🎵 Entertainment",
   };
   const ACTIVITY_LABELS = {

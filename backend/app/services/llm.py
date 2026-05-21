@@ -156,10 +156,8 @@ def generate_trip_plan(preferences: Dict[str, Any]) -> Dict[str, Any]:
     group_size = preferences.get("group_size", 1)
     budget_type = preferences.get("budget_type", "total")
     additional_notes = preferences.get("additional_notes", "")
-    raw_transport_mode = preferences.get("transport_mode", "flight")
-
-    # Validate transport feasibility before sending to main LLM
-    transport_mode, transport_override_reason = _resolve_transport_mode(origin, destination, raw_transport_mode)
+    transport_mode = preferences.get("transport_mode", "flight")
+    transport_override_reason = None  # frontend already enforces feasibility via landmass check
 
     effective_total = budget * group_size if budget_type == "per_person" else budget
     per_person = budget if budget_type == "per_person" else (budget / max(group_size, 1))
@@ -224,42 +222,44 @@ def generate_trip_plan(preferences: Dict[str, Any]) -> Dict[str, Any]:
         f"#{i+1} {p}" for i, p in enumerate(budget_priorities)
     ) if budget_priorities else "none"
 
+    is_luxury = "luxury" in [p.lower() for p in activity_preferences]
+    transport_rank = next(
+        (i + 1 for i, p in enumerate(budget_priorities) if "transport" in p.lower()),
+        len(budget_priorities) + 1,
+    )
+    if is_luxury or transport_rank == 1:
+        cabin_rule = "Recommend First Class or Business Class as primary option."
+    elif transport_rank <= 3:
+        cabin_rule = "Recommend Business Class or Premium Economy as primary option."
+    else:
+        cabin_rule = "Recommend Economy as primary option."
+
     instructions = (
         "You are an expert travel planner. Output STRICT JSON only — no markdown fences, no extra text.\n"
-        "JSON schema (field: type):\n"
-        '{"overview": string, "destination_highlights": string,\n'
-        ' "hotels": [{"name": string, "type": string, "stars": number, "price_per_night": number, "location": string, "why": string, "amenities": [string], "booking_url": string}],\n'
-        ' "activities": [{"name": string, "category": string, "cost_per_person": number, "duration": string, "description": string, "best_time": string, "tags": [string], "booking_url": string}],\n'
-        ' "food_spots": [{"name": string, "cuisine": string, "avg_price": string, "neighborhood": string, "popular_dish": string, "why_popular": string, "review_summary": string, "booking_url": string}],\n'
-        ' "itinerary": [{"day": number, "date": string, "theme": string, "morning": string, "afternoon": string, "evening": string, "meals": {"breakfast": string, "lunch": string, "dinner": string}, "estimated_daily_cost": number}],\n'
-        ' "budget_breakdown": {"hotels_total": number, "activities_total": number, "food_total": number, "transport_total": number, "shopping_misc_total": number, "grand_total": number, "within_budget": boolean, "savings_tip": string},\n'
-        ' "transportation_options": [{"mode": string, "estimated_cost_per_group": number, "duration": string, "why": string, "notes": string}],\n'
-        ' "local_tips": [string], "recommended_places": [{"name": string, "category": string, "why": string, "neighborhood": string}], "must_try_foods": [{"type": string, "dish": string}], "weather_note": string, "currency_note": string}\n'
-        f"Generate EXACTLY {nights} itinerary days, 5 hotels, 8-10 activities, 10 food_spots, 8-10 must_try_foods. "
-        "All prices in user's currency. Use real place names. "
-        "HOTEL PRICING: use realistic current market rates — do NOT underestimate. "
-        "Include taxes (12–18%), resort/destination fees, and seasonal demand in price_per_night. "
-        "For major cities (Vancouver, Toronto, NYC, London, Paris, Tokyo, Sydney) expect CAD/USD/EUR 180–400+/night for mid-range, 350–700+ for upscale. "
-        "hotels_total = price_per_night × nights (already inclusive of all fees). "
-        "food_spots.avg_price: number range e.g. '~CAD 18–30/person'. "
-        "food_spots.popular_dish: single signature dish. "
-        "food_spots.why_popular: 2–3 vivid sentences on atmosphere and must-orders. "
-        "food_spots.review_summary: one punchy critic line. "
-        "recommended_places: 6–8 specific real venues/attractions. "
-        "Prioritize categories that match activity_preferences; if none or to fill remaining slots, diversify across: Park, Museum, Market, Viewpoint, Beach, Cultural Site, Nightlife, Historic Site. "
-        "recommended_places[].category: short label e.g. 'Park', 'Museum', 'Market', 'Viewpoint'. "
-        "recommended_places[].why: 1 vivid sentence on why it's worth visiting. "
-        "must_try_foods.type: cuisine/restaurant category. must_try_foods.dish: signature dish. "
-        "weather_note: 2–3 sentences with temp in °C and °F, conditions, what to pack. "
-        "budget_breakdown totals = TOTAL GROUP SPEND. grand_total = exact sum of five categories. "
-        f"User investment priorities (ranked): {priority_allocation}. "
-        f"TARGET budget allocation (follow these percentages): {target_alloc}. "
-        "Apply each target % to EFFECTIVE TOTAL BUDGET to get the category total. "
-        "shopping_misc covers Uber, metro, snacks, coffee, tips, souvenirs. "
-        f"transport_total = round-trip cost to reach destination ({transport_mode}) + local in-city transport. "
-        "flight: realistic round-trip airfare. car_rental: rental fee + gas. own_car: gas + tolls + parking only. bus_train: round-trip ticket cost. "
-        "IMPORTANT: if the chosen transport_mode is not feasible for this route (e.g. own_car/car_rental for overseas or cross-ocean travel, flight for a short same-city drive), "
-        "silently use the most practical alternative instead and note the change in transportation_options[0].notes."
+        "Schema: {\"overview\":str,\"destination_highlights\":str,"
+        "\"hotels\":[{\"name\":str,\"type\":str,\"stars\":num,\"price_per_night\":num,\"location\":str,\"why\":str,\"amenities\":[str],\"booking_url\":str}],"
+        "\"activities\":[{\"name\":str,\"category\":str,\"cost_per_person\":num,\"duration\":str,\"description\":str,\"best_time\":str,\"tags\":[str],\"booking_url\":str}],"
+        "\"food_spots\":[{\"name\":str,\"cuisine\":str,\"avg_price\":str,\"neighborhood\":str,\"popular_dish\":str,\"why_popular\":str,\"review_summary\":str,\"booking_url\":str}],"
+        "\"itinerary\":[{\"day\":num,\"date\":str,\"theme\":str,\"morning\":str,\"afternoon\":str,\"evening\":str,\"meals\":{\"breakfast\":str,\"lunch\":str,\"dinner\":str},\"estimated_daily_cost\":num}],"
+        "\"budget_breakdown\":{\"hotels_total\":num,\"activities_total\":num,\"food_total\":num,\"transport_total\":num,\"shopping_misc_total\":num,\"grand_total\":num,\"within_budget\":bool,\"savings_tip\":str},"
+        "\"transportation_options\":[{\"type\":str,\"cabin\":str,\"durationEstimate\":str,\"why\":str,\"priceEstimate\":{\"min\":num,\"max\":num,\"currency\":str,\"confidence\":str,\"source\":\"llm_fallback\"},\"notes\":[str]}],"
+        "\"local_tips\":[str],\"recommended_places\":[{\"name\":str,\"category\":str,\"why\":str,\"neighborhood\":str}],"
+        "\"must_try_foods\":[{\"type\":str,\"dish\":str}],\"weather_note\":str,\"currency_note\":str}\n"
+        f"Counts: EXACTLY {nights} itinerary days, 4 hotels, 6 activities, 6 food_spots, 5 must_try_foods, 5 recommended_places. "
+        "Real place names. All prices in user's currency. Be concise.\n"
+        "Hotels: realistic rates incl. taxes. Major cities mid-range 180-400+/night. hotels_total = price_per_night × nights.\n"
+        "food_spots.avg_price: '~CAD 18-30/person'. popular_dish: one dish. why_popular: 1-2 sentences. review_summary: one line.\n"
+        "weather_note: 2 sentences, temp °C/°F, what to pack.\n"
+        f"Budget: priorities={priority_allocation}. Target allocation={target_alloc}. "
+        "Apply each % to EFFECTIVE TOTAL. grand_total = sum of five categories. shopping_misc = Uber,metro,snacks,coffee,tips,souvenirs.\n"
+        f"transport_total = round-trip {transport_mode} + local city transport. "
+        "flight=airfare; car_rental=rental+gas; own_car=gas+tolls+parking; bus_train=ticket.\n"
+        "FLIGHT PRICING (strict minimums, round-trip economy): "
+        "CA/US↔Asia 1300-2500; CA/US↔Europe 900-1800; CA/US↔Africa/ME 1400-2800; CA/US↔S.America 800-1600; intra-continent 200-600. "
+        "Cabin multipliers on economy: Premium Economy 1.6-2.5×; Business 3-6×; First 6-12×. "
+        f"CABIN: {cabin_rule} Always provide 2-3 options from recommended down to economy. "
+        "notes must include 'Round-trip estimate' and 'Prices vary by airline and booking date'. "
+        "priceEstimate.source='llm_fallback'. confidence=low|medium|high."
     )
 
     user_input = (
@@ -277,7 +277,7 @@ def generate_trip_plan(preferences: Dict[str, Any]) -> Dict[str, Any]:
         "Generate a complete trip plan as JSON. Use EFFECTIVE TOTAL BUDGET for all budget_breakdown totals."
     )
 
-    raw = _responses_text(instructions=instructions, user_input=user_input, max_output_tokens=5000)
+    raw = _responses_text(instructions=instructions, user_input=user_input, max_output_tokens=3500)
     print("=== LLM RAW (first 200) ===", raw[:200])
     result = _parse_trip_plan_payload(raw)
     print("=== PARSED KEYS ===", {k: (len(v) if isinstance(v, list) else type(v).__name__) for k, v in result.items() if k not in ("_raw",)})
@@ -298,10 +298,18 @@ def generate_city_recommendations(country: str, limit: int = 5) -> Dict[str, Any
         "You are an expert travel recommender. "
         "Recommend top cities for tourism in the given country. "
         "Output STRICT JSON only with this schema: "
-        "{\"country\": string, \"cities\": [{\"name\": string, \"lat\": number, \"lon\": number, \"style_fit\": string, \"description\": string}]}. "
+        "{\"country\": string, \"cities\": [{"
+        "\"name\": string, \"lat\": number, \"lon\": number, "
+        "\"style_fit\": string, \"description\": string, "
+        "\"attractions\": [string], \"vibe\": string, \"best_for\": string"
+        "}]}. "
         "Return exactly the number of cities requested with unique city names. "
         "Use real cities and realistic latitude/longitude values. "
-        "Keep style_fit and description concise (1 sentence each)."
+        "style_fit: 1 sentence on traveler fit. "
+        "description: 1 sentence overview. "
+        "attractions: exactly 3 iconic must-see places or experiences (short phrases). "
+        "vibe: 1 sentence capturing the city's atmosphere and feel. "
+        "best_for: 1 sentence on who should visit (e.g. history lovers, foodies, families, adventure seekers)."
     )
     user_input = (
         f"COUNTRY: {country}\n"
@@ -309,7 +317,7 @@ def generate_city_recommendations(country: str, limit: int = 5) -> Dict[str, Any
         "Generate recommendations now."
     )
 
-    raw = _responses_text(instructions=instructions, user_input=user_input, max_output_tokens=1200)
+    raw = _responses_text(instructions=instructions, user_input=user_input, max_output_tokens=1800)
 
     if raw.startswith("```"):
         raw = raw.split("```")[1]
@@ -325,12 +333,18 @@ def generate_city_recommendations(country: str, limit: int = 5) -> Dict[str, Any
             name = str(item.get("name", "")).strip()
             if not name:
                 continue
+            attractions = item.get("attractions", [])
+            if not isinstance(attractions, list):
+                attractions = []
             cleaned.append({
                 "name": name,
                 "lat": float(item.get("lat", 0)),
                 "lon": float(item.get("lon", 0)),
                 "style_fit": str(item.get("style_fit", "Great for many traveler styles.")).strip(),
                 "description": str(item.get("description", "A popular city with memorable travel experiences.")).strip(),
+                "attractions": [str(a).strip() for a in attractions[:3]],
+                "vibe": str(item.get("vibe", "")).strip(),
+                "best_for": str(item.get("best_for", "")).strip(),
             })
             if len(cleaned) >= limit:
                 break

@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const REQUEST_TIMEOUT_MS = 90000;
+const REQUEST_TIMEOUT_MS = 150000;
 
 function normalizeBaseUrl(url) {
   if (url == null) return "";

@@ -17,7 +17,6 @@ export default function ThemeToggle({ position = "fixed" }) {
         borderRadius: 999,
         padding: "6px 14px",
         cursor: "pointer",
-        fontSize: "1.1rem",
         display: "flex",
         alignItems: "center",
         gap: 6,

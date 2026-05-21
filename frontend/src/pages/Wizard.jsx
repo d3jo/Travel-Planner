@@ -9,11 +9,11 @@ import { useIsDarkMode, useTheme } from "../contexts/ThemeContext";
 import ThemeToggle from "../components/ThemeToggle";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const TOTAL_STEPS = 3;
+const TOTAL_STEPS = 2;
 
 const BUDGET_PRIORITIES = [
   { id: "hotels",        label: "🏨 Hotels" },
-  { id: "activities",    label: "🎭 Activities" },
+  { id: "activities",    label: "🎭 Experiences & Attractions" },
   { id: "food",          label: "🍽️ Food & Dining" },
   { id: "transport",     label: "🚗 Transportation" },
   { id: "shopping",      label: "🛍️ Shopping" },
@@ -21,18 +21,17 @@ const BUDGET_PRIORITIES = [
 ];
 
 const ACTIVITY_TAGS = [
-  { id: "outdoor",     label: "🏔️ Outdoor" },
-  { id: "cultural",    label: "🏛️ Cultural" },
-  { id: "food_tours",  label: "🍜 Food Tours" },
-  { id: "nightlife",   label: "🎵 Nightlife" },
-  { id: "wellness",    label: "🧘 Wellness" },
-  { id: "art",         label: "🎨 Art & Museums" },
-  { id: "beach",       label: "🏖️ Beach" },
-  { id: "nature",      label: "🌿 Nature" },
-  { id: "adventure",   label: "🏄 Adventure" },
-  { id: "sightseeing", label: "📸 Sightseeing" },
-  { id: "shopping",    label: "🛒 Shopping" },
-  { id: "family",      label: "👨‍👩‍👧 Family Friendly" },
+  { id: "nature",           label: "🌲 Nature" },
+  { id: "culture_history",  label: "🏛️ Culture & History" },
+  { id: "foodie",           label: "🍜 Foodie" },
+  { id: "art",              label: "🎨 Art & Museums" },
+  { id: "nightlife",        label: "🎉 Nightlife" },
+  { id: "wellness",         label: "🧘 Relaxed & Wellness" },
+  { id: "beach",            label: "🏖️ Beach & Water" },
+  { id: "shopping",         label: "🛍️ Shopping" },
+  { id: "family",           label: "👨‍👩‍👧 Family Friendly" },
+  { id: "sightseeing",      label: "📸 Iconic Sightseeing" },
+  { id: "luxury",           label: "💎 Luxury" },
 ];
 
 const TRIP_TYPES = [
@@ -332,8 +331,8 @@ const GEO_URL = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json"
 // ─── Map Phase ────────────────────────────────────────────────────────────────
 function MapPhase({ onConfirm }) {
   const isDarkMode = useIsDarkMode();
-  const mapBg = isDarkMode ? "#0f111a" : "#E8F4F8";
-  const cityPingColor = isDarkMode ? "#38bdf8" : "#fff";
+  const mapBg = isDarkMode ? "#0f111a" : "#b8dce8";
+  const cityPingColor = isDarkMode ? "#38bdf8" : "#0d6b8a";
 
   const [selected, setSelected] = useState(null);
   const [position, setPosition] = useState({ coordinates: [0, 20], zoom: 1.8 });
@@ -405,7 +404,9 @@ function MapPhase({ onConfirm }) {
         coords: [Number(city.lat) || 0, Number(city.lon) || 0],
         style: city.style_fit || "Great for diverse travel styles.",
         description: city.description || "A memorable destination with standout local experiences.",
-        photos: cityPhotoUrls(city.name, countryName),
+        attractions: Array.isArray(city.attractions) ? city.attractions : [],
+        vibe: city.vibe || "",
+        best_for: city.best_for || "",
       }));
       setCityRecommendations(normalized);
       if (!normalized.length) {
@@ -440,7 +441,7 @@ function MapPhase({ onConfirm }) {
                 style={{
                   default: isDarkMode
                     ? { fill: "#2a2f45", stroke: "#3e4a6e", strokeWidth: 0.4, outline: "none" }
-                    : { fill: "#A8CFDF", stroke: "#8AB5C8", strokeWidth: 0.4, outline: "none" },
+                    : { fill: "#dff0f5", stroke: "#a8cdd8", strokeWidth: 0.4, outline: "none" },
                   hover:   { fill: "rgba(13,148,136,0.65)", stroke: "#0d9488", strokeWidth: 0.6, outline: "none", cursor: "pointer" },
                   pressed: { fill: "#0d9488", outline: "none" },
                 }}
@@ -548,7 +549,7 @@ function MapPhase({ onConfirm }) {
                 setRecommendationError("");
               }}>✕</button>
             </div>
-            {selected.type === "country" && (
+            {selected.type === "country" && !recommendationLoading && (
               <button
                 type="button"
                 onClick={async () => {
@@ -560,16 +561,19 @@ function MapPhase({ onConfirm }) {
                   await fetchRecommendations(recommendationCountry);
                 }}
                 style={mapStyles.recommendBtn}
-                disabled={recommendationLoading}
               >
-                {recommendationLoading ? "Generating city recommendations..." : showRecommendations ? "Hide city recommendations" : "Recommend a city"}
+                {showRecommendations ? "Hide city recommendations" : "Recommend a city"}
               </button>
             )}
             {showRecommendations && (
               <div style={mapStyles.recommendPanel}>
+                {recommendationLoading ? (
+                  <CityLoadingOverlay />
+                ) : (
+                <>
                 <div style={mapStyles.recommendTitle}>Top 5 cities in {recommendationCountry}</div>
                 {recommendationError && <div style={mapStyles.recommendError}>{recommendationError}</div>}
-                {!recommendationError && cityRecommendations.length === 0 && !recommendationLoading && (
+                {!recommendationError && cityRecommendations.length === 0 && (
                   <div style={mapStyles.recommendHint}>No recommendations available.</div>
                 )}
                 <div style={mapStyles.recommendList}>
@@ -592,13 +596,46 @@ function MapPhase({ onConfirm }) {
                   <div style={mapStyles.cityInfoCard}>
                     <div style={mapStyles.cityInfoHeader}>{focusedRecommendation.name}</div>
                     <div style={mapStyles.cityInfoStyle}>{focusedRecommendation.style}</div>
-                    <div style={mapStyles.cityInfoDesc}>{focusedRecommendation.description}</div>
-                    <div style={mapStyles.cityPhotoGrid}>
-                      {focusedRecommendation.photos.map((src, idx) => (
-                        <img key={`${focusedRecommendation.name}-${idx}`} src={src} alt={`${focusedRecommendation.name} view ${idx + 1}`} style={mapStyles.cityPhoto} />
-                      ))}
+                    <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+                      {focusedRecommendation.vibe && (
+                        <div style={mapStyles.cityBulletRow}>
+                          <span style={mapStyles.cityBulletIcon}>✨</span>
+                          <span style={mapStyles.cityBulletText}><strong>Vibe:</strong> {focusedRecommendation.vibe}</span>
+                        </div>
+                      )}
+                      {focusedRecommendation.best_for && (
+                        <div style={mapStyles.cityBulletRow}>
+                          <span style={mapStyles.cityBulletIcon}>🎯</span>
+                          <span style={mapStyles.cityBulletText}><strong>Best for:</strong> {focusedRecommendation.best_for}</span>
+                        </div>
+                      )}
+                      {focusedRecommendation.attractions.length > 0 && (
+                        <div style={mapStyles.cityBulletRow}>
+                          <span style={mapStyles.cityBulletIcon}>📍</span>
+                          <span style={mapStyles.cityBulletText}>
+                            <strong>Top attractions:</strong>{" "}
+                            {focusedRecommendation.attractions.map((a, i) => (
+                              <span key={i}>
+                                <a
+                                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(a + " " + focusedRecommendation.name)}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  style={{ color: "#7ee7d6", textDecoration: "underline", textDecorationColor: "rgba(126,231,214,0.4)", cursor: "pointer" }}
+                                >{a}</a>
+                                {i < focusedRecommendation.attractions.length - 1 && <span style={{ opacity: 0.5 }}> · </span>}
+                              </span>
+                            ))}
+                          </span>
+                        </div>
+                      )}
+                      <div style={mapStyles.cityBulletRow}>
+                        <span style={mapStyles.cityBulletIcon}>🗺️</span>
+                        <span style={mapStyles.cityBulletText}>{focusedRecommendation.description}</span>
+                      </div>
                     </div>
                   </div>
+                )}
+                </>
                 )}
               </div>
             )}
@@ -850,29 +887,23 @@ const handleSubmit = async () => {
                     showCal={showCal} setShowCal={setShowCal}
                     calMonth={calMonth} setCalMonth={setCalMonth}
                     origin={origin} setOrigin={setOrigin}
+                    destination={destination}
                     budget={budget} setBudget={setBudget}
                     budgetType={budgetType} setBudgetType={setBudgetType}
-                    groupSize={groupSize}
+                    groupSize={groupSize} setGroupSize={setGroupSize}
                     currency={currency} setCurrency={setCurrency}
                     transportMode={transportMode} setTransportMode={setTransportMode}
+                    tripType={tripType} setTripType={setTripType}
                   />
                 </StepBox>
               )}
               {step === 1 && (
-                <StepBox onBack={handleBack} onNext={handleNext} loading={loading} err={err}>
-                  <StepPreferences
+                <StepBox onBack={handleBack} onSubmit={handleSubmit} loading={loading} err={err} isLast>
+                  <StepPreferencesAndDetails
                     budgetPriorities={budgetPriorities}
                     setBudgetPriorities={setBudgetPriorities}
                     activityPrefs={activityPrefs}
                     toggleActivity={(id) => toggleTag(activityPrefs, setActivityPrefs, id)}
-                  />
-                </StepBox>
-              )}
-              {step === 2 && (
-                <StepBox onBack={handleBack} onSubmit={handleSubmit} loading={loading} err={err} isLast>
-                  <StepTripDetails
-                    tripType={tripType} setTripType={setTripType}
-                    groupSize={groupSize} setGroupSize={setGroupSize}
                     notes={notes} setNotes={setNotes}
                   />
                 </StepBox>
@@ -895,12 +926,107 @@ const TRANSPORT_MODES = [
   { id: "bus_train",  label: "🚌 Bus / Train",  hint: "Ticket cost included" },
 ];
 
+// ─── Transport feasibility classifier ────────────────────────────────────────
+function getLandmass(str = "") {
+  const s = str.toLowerCase();
+  // Island nations / landmasses that require flight to reach
+  if (/\bjapan\b|tokyo|osaka|kyoto|hiroshima|sapporo|nagoya|fukuoka/.test(s))            return "japan";
+  if (/\buk\b|united kingdom|england|scotland|wales|northern ireland|london|manchester|edinburgh|glasgow/.test(s)) return "uk";
+  if (/\bireland\b|dublin|cork/.test(s))                                                  return "ireland";
+  if (/\biceland\b|reykjavik/.test(s))                                                    return "iceland";
+  if (/\baustralia\b|sydney|melbourne|brisbane|perth|adelaide|canberra/.test(s))          return "australia";
+  if (/new zealand|auckland|wellington|christchurch/.test(s))                             return "new_zealand";
+  if (/philippines|manila|cebu|davao/.test(s))                                            return "philippines";
+  if (/indonesia|jakarta|bali|surabaya|bandung/.test(s))                                  return "indonesia";
+  if (/\bsri lanka\b|colombo/.test(s))                                                    return "sri_lanka";
+  if (/maldives|mauritius|seychelles|reunion/.test(s))                                    return "indian_ocean_islands";
+  if (/\bcuba\b|havana|jamaica|kingston|barbados|trinidad|bahamas|nassau|haiti|port.au.prince|dominican|santo domingo|martinique|guadeloupe/.test(s)) return "caribbean";
+  if (/\bhawaii\b|honolulu/.test(s))                                                      return "hawaii";
+  if (/\btaiwan\b|taipei|kaohsiung/.test(s))                                              return "taiwan";
+  if (/\bmadagascar\b/.test(s))                                                           return "madagascar";
+  if (/\bsingapore\b/.test(s))                                                            return "singapore"; // city-state island
+
+  // Americas (North + South, connected by Panama)
+  if (/canada|ontario|british columbia|alberta|quebec|manitoba|saskatchewan|nova scotia|new brunswick|toronto|vancouver|montreal|calgary|ottawa|edmonton|winnipeg/.test(s)) return "americas";
+  if (/united states|usa|\bu\.s\.a\b|new york|los angeles|chicago|houston|miami|seattle|boston|atlanta|denver|dallas|phoenix|san francisco|san diego|portland|las vegas/.test(s)) return "americas";
+  if (/mexico|guadalajara|monterrey|cancun/.test(s))                                      return "americas";
+  if (/brazil|argentina|colombia|peru|chile|venezuela|ecuador|bolivia|uruguay|paraguay|sao paulo|rio de janeiro|buenos aires|bogota|lima|santiago/.test(s)) return "americas";
+  if (/costa rica|panama|guatemala|honduras|el salvador|nicaragua|belize/.test(s))        return "americas";
+
+  // Afro-Eurasia (Europe + Asia mainland + Africa — all connected by land)
+  if (/france|germany|spain|italy|portugal|netherlands|belgium|switzerland|austria|denmark|sweden|norway|finland|poland|czech|hungary|romania|bulgaria|greece|turkey|ukraine|serbia|croatia|slovakia|albania|lithuania|latvia|estonia|slovenia|luxembourg|malta/.test(s)) return "afro_eurasia";
+  if (/paris|berlin|madrid|rome|amsterdam|barcelona|vienna|zurich|oslo|stockholm|helsinki|copenhagen|warsaw|athens|lisbon|brussels|budapest|prague|bucharest|sofia|zagreb/.test(s)) return "afro_eurasia";
+  if (/russia|moscow|saint petersburg|novosibirsk/.test(s))                               return "afro_eurasia";
+  if (/china|beijing|shanghai|guangzhou|shenzhen|chengdu|wuhan|hong kong|macau/.test(s)) return "afro_eurasia";
+  if (/india|mumbai|delhi|bangalore|hyderabad|chennai|kolkata/.test(s))                   return "afro_eurasia";
+  if (/south korea|north korea|seoul|busan/.test(s))                                     return "afro_eurasia"; // peninsula, connected via N.Korea
+  if (/vietnam|thailand|myanmar|cambodia|laos|malaysia|kuala lumpur|hanoi|ho chi minh|bangkok/.test(s)) return "afro_eurasia";
+  if (/bangladesh|pakistan|afghanistan|nepal|bhutan|mongolia|kazakhstan|uzbekistan|kyrgyzstan|tajikistan|turkmenistan|azerbaijan|georgia|armenia/.test(s)) return "afro_eurasia";
+  if (/dubai|abu dhabi|uae|saudi arabia|riyadh|qatar|doha|kuwait|bahrain|oman|muscat|iran|tehran|iraq|baghdad|jordan|amman|lebanon|beirut|israel|tel aviv|jerusalem/.test(s)) return "afro_eurasia";
+  if (/kenya|nairobi|nigeria|lagos|ethiopia|addis ababa|ghana|accra|tanzania|dar es salaam|south africa|johannesburg|cape town|morocco|casablanca|egypt|cairo|algeria|tunisia|senegal|dakar|ivory coast|abidjan|cameroon|uganda|rwanda|zimbabwe|zambia|mozambique/.test(s)) return "afro_eurasia";
+
+  return "unknown";
+}
+
+// Returns set of mode IDs that should be disabled for this route
+function getDisabledModes(originStr, destStr) {
+  if (!originStr || !destStr) return new Set();
+  const oLM = getLandmass(originStr);
+  const dLM = getLandmass(destStr);
+  if (oLM === "unknown" || dLM === "unknown") return new Set(); // can't determine — don't restrict
+
+  // Same landmass: everything is allowed
+  if (oLM === dLM) return new Set();
+
+  // Landmasses that are standalone islands/continents — always need flight
+  const alwaysIsland = new Set(["japan","uk","ireland","iceland","australia","new_zealand",
+    "philippines","indonesia","sri_lanka","indian_ocean_islands","caribbean","hawaii","taiwan","madagascar"]);
+
+  // Singapore is technically reachable by land/bridge from Malaysia (afro_eurasia) but not from Americas
+  const oIsIsland = alwaysIsland.has(oLM) || oLM === "singapore";
+  const dIsIsland = alwaysIsland.has(dLM) || dLM === "singapore";
+
+  // Singapore ↔ Malaysia (afro_eurasia): allow all (bridge/causeway)
+  if ((oLM === "singapore" && dLM === "afro_eurasia") || (oLM === "afro_eurasia" && dLM === "singapore")) {
+    return new Set(); // Johor–Singapore causeway — drivable
+  }
+
+  // UK ↔ continental Europe: ferry/chunnel exists, allow bus_train; disable own_car/car_rental
+  if ((oLM === "uk" && dLM === "afro_eurasia") || (oLM === "afro_eurasia" && dLM === "uk")) {
+    return new Set(["own_car", "car_rental"]);
+  }
+
+  // Ireland ↔ UK: ferry, allow bus_train; disable own_car/car_rental
+  if ((oLM === "ireland" && dLM === "uk") || (oLM === "uk" && dLM === "ireland")) {
+    return new Set(["own_car", "car_rental"]);
+  }
+
+  // Any other cross-landmass: flight only
+  if (oIsIsland || dIsIsland || oLM !== dLM) {
+    return new Set(["own_car", "car_rental", "bus_train"]);
+  }
+
+  return new Set();
+}
+
 function StepDatesAndBudget({
-  origin, setOrigin, dateRange, setDateRange, showCal, setShowCal, calMonth, setCalMonth,
-  budget, setBudget, budgetType, setBudgetType, groupSize, currency, setCurrency,
-  transportMode, setTransportMode,
+  origin, setOrigin, destination, dateRange, setDateRange, showCal, setShowCal, calMonth, setCalMonth,
+  budget, setBudget, budgetType, setBudgetType, groupSize, setGroupSize, currency, setCurrency,
+  transportMode, setTransportMode, tripType, setTripType,
 }) {
   const isDarkMode = useIsDarkMode();
+
+  const disabledModes = getDisabledModes(origin, destination);
+
+  const handleTripTypeSelect = (next) => {
+    setTripType(next);
+    setGroupSize(next === "solo" ? 1 : 2);
+  };
+
+  // Auto-switch to flight if current mode becomes disabled
+  useEffect(() => {
+    if (disabledModes.has(transportMode)) setTransportMode("flight");
+  }, [disabledModes, transportMode, setTransportMode]);
   const inputBg     = isDarkMode ? "rgba(255,255,255,0.04)" : "rgba(168,207,223,0.12)";
   const panelBorder = isDarkMode ? "1px solid rgba(255,255,255,0.12)" : "1px solid rgba(168,207,223,0.35)";
 
@@ -930,133 +1056,163 @@ function StepDatesAndBudget({
         .calendar-picker .rdp { margin: 0; width: 100%; }
         .calendar-picker .rdp-month { width: 100%; }
         .calendar-picker .rdp-table { width: 100%; border-collapse: collapse; }
-        .calendar-picker .rdp-cell, .calendar-picker .rdp-head_cell { padding: 2px; text-align: center; }
-        .calendar-picker .rdp-day { height: 32px; width: 100%; max-width: 100%; font-size: 1rem; border-radius: 6px; }
-        .calendar-picker .rdp-caption { padding: 4px 0; margin-bottom: 4px; }
-        .calendar-picker .rdp-head_cell { font-size: 1rem; }
-        .calendar-picker .rdp-caption_label { font-size: 1rem; padding-left: 15px; }
+        .calendar-picker .rdp-cell, .calendar-picker .rdp-head_cell { padding: 1px; text-align: center; }
+        .calendar-picker .rdp-day { height: 34px; width: 100%; max-width: 100%; font-size: 0.88rem; border-radius: 6px; }
+        .calendar-picker .rdp-caption { padding: 2px 0; margin-bottom: 2px; }
+        .calendar-picker .rdp-head_cell { font-size: 0.82rem; }
+        .calendar-picker .rdp-caption_label { font-size: 0.95rem; padding-left: 10px; }
       `}</style>
 
-      <div style={styles.stepLabel}>Step 1 of 3</div>
+      <div style={styles.stepLabel}>Step 1 of 2</div>
 
-      {/* Row 1: origin + budget side by side */}
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1.4fr) minmax(0,1fr)", gap: 10 }}>
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          <div style={styles.stepTitle}>Where are you traveling from?</div>
-          <LocationInput
-            value={origin}
-            onChange={setOrigin}
-            placeholder="e.g. Toronto, Canada"
-            inputStyle={{ ...styles.input, background: inputBg, border: panelBorder }}
-            isDarkMode={isDarkMode}
-          />
-          <div style={styles.stepHint}>Select a location from the dropdown to confirm.</div>
+      {/* Two-column layout: left = all inputs, right = calendar */}
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)", gap: 16, alignItems: "stretch" }}>
+
+        {/* ── LEFT COLUMN: origin + transport + budget ── */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+
+          {/* Origin */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <div style={styles.stepTitle}>Where are you traveling from?</div>
+            <LocationInput
+              value={origin}
+              onChange={setOrigin}
+              placeholder="e.g. Toronto, Canada"
+              inputStyle={{ ...styles.input, background: inputBg, border: panelBorder }}
+              isDarkMode={isDarkMode}
+            />
+            <div style={styles.stepHint}>Select a location from the dropdown to confirm.</div>
+          </div>
+
+          {/* Transport mode */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <div style={styles.stepTitle}>How are you getting there?</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 7 }}>
+              {TRANSPORT_MODES.map(({ id, label, hint }) => {
+                const sel = transportMode === id;
+                const disabled = disabledModes.has(id);
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => !disabled && setTransportMode(id)}
+                    disabled={disabled}
+                    title={disabled ? "Not available for this route" : undefined}
+                    style={{
+                      display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 3,
+                      padding: "10px 12px", borderRadius: 10, textAlign: "left",
+                      cursor: disabled ? "not-allowed" : "pointer",
+                      opacity: disabled ? 0.38 : 1,
+                      background: sel ? "rgba(13,148,136,0.12)" : inputBg,
+                      border: `1px solid ${sel ? "var(--cal-accent)" : panelBorder.replace("1px solid ", "")}`,
+                      transition: "all 0.15s",
+                    }}
+                  >
+                    <span style={{ fontSize: "0.9rem", fontWeight: sel ? 700 : 500, color: sel ? "var(--cal-accent-fg)" : "var(--white)", fontFamily: '"Pixelify Sans", sans-serif' }}>
+                      {label}
+                    </span>
+                    <span style={{ fontSize: "0.7rem", color: disabled ? "var(--text-muted)" : sel ? "var(--cal-accent)" : "var(--text-muted)" }}>
+                      {disabled ? "Not available for this route" : hint}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            {disabledModes.size > 0 ? (
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 7, padding: "7px 11px", borderRadius: 8, background: "rgba(251,191,36,0.07)", border: "1px solid rgba(251,191,36,0.25)" }}>
+                <span style={{ fontSize: "0.78rem", flexShrink: 0 }}>⚠️</span>
+                <span style={{ fontSize: "0.74rem", color: "var(--text-muted)", lineHeight: 1.45 }}>
+                  {disabledModes.size === 3
+                    ? "This route requires a flight — land & rail options are unavailable."
+                    : "Some options are unavailable for this route (no drive-on crossing)."}
+                </span>
+              </div>
+            ) : (
+              <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "7px 11px", borderRadius: 8, background: "rgba(56,189,248,0.07)", border: "1px solid rgba(56,189,248,0.18)" }}>
+                <span style={{ fontSize: "0.78rem" }}>ℹ️</span>
+                <span style={{ fontSize: "0.74rem", color: "var(--text-muted)", lineHeight: 1.45 }}>
+                  All transport options are available for this route.
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* Budget */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <div style={styles.stepTitle}>Budget</div>
+            <div style={{ display: "flex", borderRadius: 10, overflow: "hidden", border: panelBorder }}>
+              {[
+                { id: "per_person", label: "Per Person" },
+                { id: "total",      label: "Total for Group" },
+              ].map(({ id, label }) => (
+                <button key={id} type="button" onClick={() => setBudgetType(id)} style={{
+                  flex: 1, padding: "9px 6px",
+                  background: budgetType === id ? "var(--cal-accent)" : "transparent",
+                  color: budgetType === id ? "#fff" : isDarkMode ? "rgba(255,255,255,0.5)" : "rgba(100,120,140,0.7)",
+                  border: "none", cursor: "pointer",
+                  fontSize: "0.8rem", fontWeight: 700,
+                  fontFamily: '"Pixelify Sans", sans-serif',
+                  transition: "background 0.2s, color 0.2s",
+                }}>{label}</button>
+              ))}
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <select value={currency} onChange={(e) => setCurrency(e.target.value)}
+                style={{ ...styles.input, background: inputBg, border: panelBorder, flex: "0 0 78px", padding: "12px 6px" }}
+              >{CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}</select>
+              <input type="number" min="1"
+                placeholder={budgetType === "per_person" ? "e.g. 1500" : "e.g. 3000"}
+                value={budget}
+                onChange={(e) => setBudget(e.target.value)}
+                style={{ ...styles.input, background: inputBg, border: panelBorder, flex: 1 }}
+              />
+            </div>
+            {equivalentLabel && (
+              <div style={{ fontSize: "0.78rem", color: "var(--cal-accent)", fontWeight: 600 }}>{equivalentLabel}</div>
+            )}
+            <div style={styles.stepHint}>Hotels, food, activities, transport — all included</div>
+          </div>
+
+          {/* Trip type */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <div style={styles.stepTitle}>Trip type</div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {TRIP_TYPES.map((tt) => (
+                <Tag key={tt.id} label={tt.label} selected={tripType === tt.id} onClick={() => handleTripTypeSelect(tt.id)} />
+              ))}
+            </div>
+          </div>
+
+          {/* Number of travelers */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <div style={styles.stepTitle}>Number of travelers</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+              <button type="button" style={styles.counterBtn} onClick={() => setGroupSize((v) => Math.max(1, v - 1))}>−</button>
+              <span style={{ fontSize: "1.5rem", fontFamily: '"Pixelify Sans", sans-serif', minWidth: 28, textAlign: "center" }}>{groupSize}</span>
+              <button type="button" style={styles.counterBtn} onClick={() => setGroupSize((v) => Math.min(20, v + 1))}>+</button>
+              <span style={{ color: "var(--text-muted)", fontSize: "0.9rem" }}>{groupSize === 1 ? "traveler" : "travelers"}</span>
+            </div>
+          </div>
         </div>
 
+        {/* ── RIGHT COLUMN: calendar only ── */}
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          <div style={styles.stepTitle}>Budget</div>
-
-          {/* Per person / Total toggle */}
-          <div style={{ display: "flex", borderRadius: 10, overflow: "hidden", border: panelBorder }}>
-            {[
-              { id: "per_person", label: "Per Person" },
-              { id: "total",      label: "Total for Group" },
-            ].map(({ id, label }) => (
-              <button key={id} type="button" onClick={() => setBudgetType(id)} style={{
-                flex: 1, padding: "9px 6px",
-                background: budgetType === id ? "var(--cal-accent)" : "transparent",
-                color: budgetType === id ? "#fff" : isDarkMode ? "rgba(255,255,255,0.5)" : "rgba(100,120,140,0.7)",
-                border: "none", cursor: "pointer",
-                fontSize: "0.8rem", fontWeight: 700,
-                fontFamily: '"Pixelify Sans", sans-serif',
-                transition: "background 0.2s, color 0.2s",
-              }}>{label}</button>
-            ))}
-          </div>
-
-          <div style={{ display: "flex", gap: 8 }}>
-            <select value={currency} onChange={(e) => setCurrency(e.target.value)}
-              style={{ ...styles.input, background: inputBg, border: panelBorder, flex: "0 0 78px", padding: "12px 6px" }}
-            >{CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}</select>
-            <input type="number" min="1"
-              placeholder={budgetType === "per_person" ? "e.g. 1500" : "e.g. 3000"}
-              value={budget}
-              onChange={(e) => setBudget(e.target.value)}
-              style={{ ...styles.input, background: inputBg, border: panelBorder, flex: 1 }}
-            />
-          </div>
-
-          {equivalentLabel && (
-            <div style={{ fontSize: "0.78rem", color: "var(--cal-accent)", fontWeight: 600 }}>
-              {equivalentLabel}
+          <div style={styles.stepTitle}>When are you traveling?</div>
+          {dateRange?.from && (
+            <div style={{ fontSize: "0.82rem", color: "var(--cal-accent)", fontWeight: 600 }}>
+              📅 {formatDateRange(dateRange)}
             </div>
           )}
-          <div style={styles.stepHint}>Hotels, food, activities, transport — all included</div>
+          <div className="calendar-picker" style={{
+            ...styles.calCard, background: inputBg, border: panelBorder,
+            padding: "8px 10px", flex: 1,
+          }}>
+            <DayPicker mode="range" selected={dateRange} onSelect={handleDateSelect}
+              month={calMonth} onMonthChange={setCalMonth}
+              disabled={{ before: new Date() }} showOutsideDays
+            />
+          </div>
         </div>
-      </div>
-
-      {/* Row 2: transport mode */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        <div style={styles.stepTitle}>How are you getting there?</div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 8 }}>
-          {TRANSPORT_MODES.map(({ id, label, hint }) => {
-            const sel = transportMode === id;
-            return (
-              <button key={id} type="button" onClick={() => setTransportMode(id)} style={{
-                display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 3,
-                padding: "10px 14px", borderRadius: 10, cursor: "pointer", textAlign: "left",
-                background: sel ? "rgba(13,148,136,0.12)" : inputBg,
-                border: `1px solid ${sel ? "var(--cal-accent)" : panelBorder.replace("1px solid ", "")}`,
-                transition: "all 0.15s",
-              }}>
-                <span style={{ fontSize: "0.92rem", fontWeight: sel ? 700 : 500, color: sel ? "var(--cal-accent-fg)" : "var(--white)", fontFamily: '"Pixelify Sans", sans-serif' }}>
-                  {label}
-                </span>
-                <span style={{ fontSize: "0.72rem", color: sel ? "var(--cal-accent)" : "var(--text-muted)" }}>
-                  {hint}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 2, padding: "7px 11px", borderRadius: 8, background: "rgba(56,189,248,0.07)", border: "1px solid rgba(56,189,248,0.18)" }}>
-          <span style={{ fontSize: "0.78rem" }}>ℹ️</span>
-          <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", lineHeight: 1.45 }}>
-            If your selection isn't practical for the route (e.g. driving overseas), the AI will automatically switch to the best alternative and note it in your plan.
-          </span>
-        </div>
-      </div>
-
-      {/* Row 3: date trigger + full-width calendar below */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-        <div style={styles.stepTitle}>When are you traveling?</div>
-        <button type="button"
-          style={{ ...styles.dateDisplayBtn, background: inputBg, border: panelBorder }}
-          onClick={() => setShowCal((v) => !v)}
-        >📅 {formatDateRange(dateRange)}</button>
-        <AnimatePresence>
-          {showCal && (
-            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.22 }}
-              style={{ overflow: "hidden" }}
-            >
-              <div className="calendar-picker" style={{
-                ...styles.calCard, background: inputBg, border: panelBorder,
-                padding: '1px 1px',
-                transform: "scale(0.85)",
-                transformOrigin: "top center",
-                marginTop: 10,
-                marginBottom: -50,
-
-              }}>
-                <DayPicker mode="range" selected={dateRange} onSelect={handleDateSelect}
-                  month={calMonth} onMonthChange={setCalMonth}
-                  disabled={{ before: new Date() }} showOutsideDays
-                />
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
       </div>
     </div>
   );
@@ -1067,102 +1223,149 @@ function StepDatesAndBudget({
 
 const RANK_COLORS = ["#0d9488", "#8b5cf6", "#f59e0b", "#3b82f6", "#ec4899", "#94a3b8"];
 
-function StepPreferences({ budgetPriorities, setBudgetPriorities, activityPrefs, toggleActivity }) {
+function StepPreferencesAndDetails({
+  budgetPriorities, setBudgetPriorities, activityPrefs, toggleActivity, notes, setNotes,
+}) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 14, paddingBottom: 6 }}>
-      <div style={styles.stepLabel}>Step 2 of 3</div>
-      <div style={styles.stepTitle}>Rank your investment priorities</div>
-      <div style={styles.stepHint}>Drag to reorder — #1 receives the largest budget share</div>
+    <div style={{ display: "flex", flexDirection: "column", gap: 12, paddingBottom: 6 }}>
+      <div style={styles.stepLabel}>Step 2 of 2</div>
 
-      <Reorder.Group
-        axis="y"
-        values={budgetPriorities}
-        onReorder={setBudgetPriorities}
-        style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 6 }}
-      >
-        {budgetPriorities.map((id, index) => {
-          const item = BUDGET_PRIORITIES.find(p => p.id === id);
-          const rankColor = RANK_COLORS[index] ?? "#94a3b8";
-          return (
-            <Reorder.Item
-              key={id}
-              value={id}
-              style={{ listStyle: "none" }}
-              initial={false}
-              animate={{ scale: 1, boxShadow: "0px 0px 0px rgba(0,0,0,0)" }}
-              whileDrag={{ scale: 1.03, boxShadow: "0px 10px 28px rgba(0,0,0,0.28)" }}
-              transition={{ duration: 0.15 }}
-            >
-              <div style={{
-                display: "flex", alignItems: "center", gap: 12,
-                padding: "11px 14px", borderRadius: 11,
-                background: "var(--bg-card)", border: "1px solid var(--border-col)",
-                cursor: "grab", userSelect: "none",
-              }}>
-                <div style={{
-                  minWidth: 28, height: 28, borderRadius: "50%",
-                  background: rankColor, display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: "0.82rem", fontWeight: 900, color: "#fff", flexShrink: 0,
-                  fontFamily: '"Pixelify Sans", sans-serif',
-                }}>
-                  {index + 1}
-                </div>
-                <span style={{ flex: 1, fontSize: "0.95rem", color: "var(--white)", fontWeight: 500 }}>
-                  {item?.label}
-                </span>
-                <span style={{ color: "var(--text-muted)", fontSize: "1.1rem", letterSpacing: "0.05em", opacity: 0.4 }}>
-                  ⠿
-                </span>
-              </div>
-            </Reorder.Item>
-          );
-        })}
-      </Reorder.Group>
+      {/* Two-column layout */}
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)", gap: 20, alignItems: "start" }}>
 
-      <div style={styles.divider} />
-      <div style={styles.stepTitle}>What activities do you enjoy?</div>
-      <div style={styles.tagGrid}>
-        {ACTIVITY_TAGS.map((t) => (
-          <Tag key={t.id} label={t.label} selected={activityPrefs.includes(t.id)} onClick={() => toggleActivity(t.id)} />
-        ))}
+        {/* ── LEFT: priorities + vibe ── */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <div>
+            <div style={styles.stepTitle}>Rank your investment priorities</div>
+            <div style={styles.stepHint}>Drag to reorder — #1 gets the largest budget share</div>
+          </div>
+          <Reorder.Group
+            axis="y" values={budgetPriorities} onReorder={setBudgetPriorities}
+            style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 5 }}
+          >
+            {budgetPriorities.map((id, index) => {
+              const item = BUDGET_PRIORITIES.find(p => p.id === id);
+              const rankColor = RANK_COLORS[index] ?? "#94a3b8";
+              return (
+                <Reorder.Item key={id} value={id} style={{ listStyle: "none" }}
+                  initial={false}
+                  animate={{ scale: 1, boxShadow: "0px 0px 0px rgba(0,0,0,0)" }}
+                  whileDrag={{ scale: 1.03, boxShadow: "0px 10px 28px rgba(0,0,0,0.28)" }}
+                  transition={{ duration: 0.15 }}
+                >
+                  <div style={{
+                    display: "flex", alignItems: "center", gap: 12,
+                    padding: "9px 12px", borderRadius: 11,
+                    background: "var(--bg-card)", border: "1px solid var(--border-col)",
+                    cursor: "grab", userSelect: "none",
+                  }}>
+                    <div style={{
+                      minWidth: 26, height: 26, borderRadius: "50%",
+                      background: rankColor, display: "flex", alignItems: "center", justifyContent: "center",
+                      fontSize: "0.78rem", fontWeight: 900, color: "#fff", flexShrink: 0,
+                      fontFamily: '"Pixelify Sans", sans-serif',
+                    }}>{index + 1}</div>
+                    <span style={{ flex: 1, fontSize: "0.9rem", color: "var(--white)", fontWeight: 500 }}>{item?.label}</span>
+                    <span style={{ color: "var(--text-muted)", fontSize: "1rem", opacity: 0.4 }}>⠿</span>
+                  </div>
+                </Reorder.Item>
+              );
+            })}
+          </Reorder.Group>
+
+          <div style={styles.divider} />
+          <div>
+            <div style={styles.stepTitle}>Choose your trip vibe</div>
+            <div style={styles.stepHint}>Pick the styles you want the itinerary to focus on.</div>
+          </div>
+          <div style={styles.tagGrid}>
+            {ACTIVITY_TAGS.map((t) => (
+              <Tag key={t.id} label={t.label} selected={activityPrefs.includes(t.id)} onClick={() => toggleActivity(t.id)} />
+            ))}
+          </div>
+        </div>
+
+        {/* ── RIGHT: notes + ready box ── */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <div>
+            <div style={styles.stepTitle}>Anything specific you want to do?</div>
+            <div style={styles.stepHint}>Restaurants, landmarks, dietary needs, accessibility…</div>
+          </div>
+          <textarea
+            placeholder="e.g. I love sushi, want to visit temples, need wheelchair access…"
+            value={notes} onChange={(e) => setNotes(e.target.value)}
+            style={styles.textarea} rows={4}
+          />
+
+          <div style={styles.readyBox}>
+            <div style={styles.readyTitle}>You're all set! 🎉</div>
+            <div style={styles.readyText}>
+              Hit Generate below — our AI will craft hotels, experiences, a day-by-day itinerary, and budget breakdown just for you.
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
-function StepTripDetails({ tripType, setTripType, groupSize, setGroupSize, notes, setNotes }) {
-    const handleTripTypeSelect = (nextTripType) => {
-    setTripType(nextTripType);
-    setGroupSize(nextTripType === "solo" ? 1 : 2);
-  };
+function CityLoadingOverlay() {
+  const msgs = [
+    "Scouting the top cities...",
+    "Reading travel guides...",
+    "Checking local hotspots...",
+    "Almost there...",
+  ];
+  const [msgIdx, setMsgIdx] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setMsgIdx((i) => (i + 1) % msgs.length), 2200);
+    return () => clearInterval(t);
+  }, []);
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 14, paddingBottom: 6 }}>
-      <div style={styles.stepLabel}>Step 3 of 3</div>
-      <div style={styles.stepTitle}>Trip type</div>
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-        {TRIP_TYPES.map((tt) => (
-          <Tag key={tt.id} label={tt.label} selected={tripType === tt.id} onClick={() => handleTripTypeSelect(tt.id)} />
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "18px 12px 14px", gap: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <motion.span
+          animate={{ rotate: 360 }}
+          transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
+          style={{ fontSize: "1.3rem", display: "inline-block", opacity: 0.7 }}
+        >⚙️</motion.span>
+        <motion.div
+          animate={{ y: [0, -8, 0], rotate: [0, -4, 4, 0] }}
+          transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
+          style={{ fontSize: "2.8rem", lineHeight: 1, filter: "drop-shadow(0 0 12px rgba(13,148,136,0.55))" }}
+        >🤖</motion.div>
+        <motion.span
+          animate={{ rotate: -360 }}
+          transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
+          style={{ fontSize: "1.3rem", display: "inline-block", opacity: 0.7 }}
+        >⚙️</motion.span>
+      </div>
+
+      <div style={{ height: 22, display: "flex", alignItems: "center", overflow: "hidden" }}>
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={msgIdx}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.3 }}
+            style={{ fontSize: "0.82rem", color: "var(--white)", fontWeight: 600, textAlign: "center", whiteSpace: "nowrap" }}
+          >
+            {msgs[msgIdx]}
+          </motion.div>
+        </AnimatePresence>
+      </div>
+
+      <div style={{ display: "flex", gap: 4 }}>
+        {[0, 1, 2, 3, 4].map((i) => (
+          <motion.div
+            key={i}
+            animate={{ scaleY: [0.4, 1.4, 0.4], opacity: [0.35, 1, 0.35] }}
+            transition={{ duration: 0.9, repeat: Infinity, delay: i * 0.15, ease: "easeInOut" }}
+            style={{ width: 5, height: 16, borderRadius: 3, background: "var(--cal-accent)", transformOrigin: "center" }}
+          />
         ))}
-      </div>
-      <div style={styles.stepTitle}>Number of travelers</div>
-      <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-        <button type="button" style={styles.counterBtn} onClick={() => setGroupSize((v) => Math.max(1, v - 1))}>−</button>
-        <span style={{ fontSize: "1.5rem", fontFamily: '"Pixelify Sans", sans-serif', minWidth: 28, textAlign: "center" }}>{groupSize}</span>
-        <button type="button" style={styles.counterBtn} onClick={() => setGroupSize((v) => Math.min(20, v + 1))}>+</button>
-        <span style={{ color: "var(--text-muted)", fontSize: "0.9rem" }}>{groupSize === 1 ? "traveler" : "travelers"}</span>
-      </div>
-      <div style={styles.divider} />
-      <div style={styles.stepTitle}>Anything specific you want to do?</div>
-      <div style={styles.stepHint}>Restaurants, landmarks, dietary needs, accessibility…</div>
-      <textarea placeholder="e.g. I love sushi, want to visit temples, need wheelchair access…"
-        value={notes} onChange={(e) => setNotes(e.target.value)}
-        style={styles.textarea} rows={3}
-      />
-      <div style={styles.readyBox}>
-        <div style={styles.readyTitle}>You're all set! 🎉</div>
-        <div style={styles.readyText}>
-          Hit Generate below — our AI will craft hotels, activities, a day-by-day itinerary, and budget breakdown just for you.
-        </div>
       </div>
     </div>
   );
@@ -1318,10 +1521,10 @@ const mapStyles = {
     borderTop: "1px solid rgba(255,255,255,0.12)", paddingTop: 10, display: "flex", flexDirection: "column", gap: 6,
   },
   cityInfoHeader: { fontFamily: '"Pixelify Sans", sans-serif', fontSize: "1.2rem", fontWeight: 700 },
-  cityInfoStyle: { color: "#7ee7d6", fontSize: "0.9rem" },
-  cityInfoDesc: { color: "rgba(255,255,255,0.86)", fontSize: "0.86rem", lineHeight: 1.4 },
-  cityPhotoGrid: { display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 },
-  cityPhoto: { width: "100%", height: 120, objectFit: "cover", borderRadius: 8 },
+  cityInfoStyle: { color: "#7ee7d6", fontSize: "0.88rem", marginBottom: 2 },
+  cityBulletRow: { display: "flex", alignItems: "flex-start", gap: 8 },
+  cityBulletIcon: { fontSize: "0.95rem", flexShrink: 0, marginTop: 1 },
+  cityBulletText: { fontSize: "0.86rem", color: "rgba(255,255,255,0.88)", lineHeight: 1.5 },
 };
 
 const styles = {
@@ -1335,9 +1538,9 @@ const styles = {
 },
 content: {
   display: "flex", flexDirection: "column", alignItems: "center",
-  width: "100%", maxWidth: 860,
+  width: "100%", maxWidth: 1020,
   gap: 12,
-  minHeight: 0,              // remove height: "100%"
+  minHeight: 0,
 },
   header: { textAlign: "center", width: "100%", flexShrink: 0 },
   title: { fontSize: "1.8rem", fontWeight: 900, fontFamily: '"Pixelify Sans", sans-serif', color: "var(--white)" },
