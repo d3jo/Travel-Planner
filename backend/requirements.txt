@@ -4,3 +4,7 @@ pydantic
 python-dotenv
 openai
 httpx
+sqlalchemy
+python-jose[cryptography]
+bcrypt
+python-multipart

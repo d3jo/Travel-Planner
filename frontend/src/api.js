@@ -57,15 +57,26 @@ function getFallbackBaseUrls(primaryBaseUrl) {
 
 let preferredBaseUrl = resolveApiBaseUrl();
 
+function getAuthHeaders() {
+  const token = localStorage.getItem("tp_token");
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 async function requestWithFallback(config) {
   const candidateBases = getFallbackBaseUrls(preferredBaseUrl);
   let lastError;
 
+  const authHeaders = getAuthHeaders();
+  const mergedConfig = {
+    ...config,
+    headers: { ...authHeaders, ...(config.headers || {}) },
+  };
+
   for (const baseURL of candidateBases) {
     try {
       const response = await axios.request({
-        ...config,
-        url: normalizeRequestPath(config.url),
+        ...mergedConfig,
+        url: normalizeRequestPath(mergedConfig.url),
         baseURL,
         timeout: REQUEST_TIMEOUT_MS,
       });

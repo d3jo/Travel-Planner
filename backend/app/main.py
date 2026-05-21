@@ -10,6 +10,9 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.routes.trip import router as trip_router
 from app.routes.photos import router as photos_router
+from app.routes.auth import router as auth_router
+from app.routes.saved_trips import router as saved_trips_router
+from app.database import init_db
 
 
 def _cors_origins() -> list[str]:
@@ -43,6 +46,10 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    init_db()
+
+    app.include_router(auth_router)
+    app.include_router(saved_trips_router)
     app.include_router(trip_router)
     app.include_router(photos_router)
 

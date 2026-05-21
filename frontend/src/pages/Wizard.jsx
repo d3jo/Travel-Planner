@@ -8,6 +8,17 @@ import api, { getBaseUrl } from "../api";
 import { useIsDarkMode, useTheme } from "../contexts/ThemeContext";
 import ThemeToggle from "../components/ThemeToggle";
 
+// ─── City name normalizer ─────────────────────────────────────────────────────
+function formatCityFromNominatim(item) {
+  const a = item.address || {};
+  const city = a.city || a.town || a.village || a.municipality || a.suburb || item.display_name.split(",")[0].trim();
+  const state = a.state || a.province || "";
+  const country = a.country || "";
+  if (state && country) return `${city}, ${state}, ${country}`;
+  if (country) return `${city}, ${country}`;
+  return city;
+}
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 const TOTAL_STEPS = 2;
 
@@ -109,7 +120,7 @@ function LocationInput({ value, onChange, placeholder, inputStyle: style, isDark
   }, []);
 
   const pick = (item) => {
-    const name = item.display_name.split(",").slice(0, 3).join(", ").trim();
+    const name = formatCityFromNominatim(item);
     setQuery(name);
     setConfirmed(true);
     onChange(name);
@@ -168,7 +179,7 @@ function LocationInput({ value, onChange, placeholder, inputStyle: style, isDark
                   {s.type === "country" ? "🌍" : s.addresstype === "city" || s.type === "city" ? "🏙️" : "📍"}
                 </span>
                 <span style={{ fontSize: "0.88rem", color: textColor, lineHeight: 1.3 }}>
-                  {s.display_name.split(",").slice(0, 3).join(", ")}
+                  {formatCityFromNominatim(s)}
                 </span>
               </li>
             ))}
@@ -209,14 +220,16 @@ function MapSearchBar({ onSelect, isDarkMode = true }) {
 
   const pickSuggestion = (item) => {
     const isCountry = item.type === "country" || item.addresstype === "country";
-    const primary = item.display_name.split(",").slice(0, 2).join(",").trim();
+    const name = isCountry
+      ? (item.address?.country || item.display_name.split(",")[0].trim())
+      : formatCityFromNominatim(item);
     onSelect({
-      name: primary,
+      name,
       coords: [parseFloat(item.lat), parseFloat(item.lon)],
       type: isCountry ? "country" : "city",
-      countryName: isCountry ? item.display_name.split(",")[0].trim() : item.address?.country,
+      countryName: isCountry ? name : item.address?.country,
     });
-    setQuery(primary);
+    setQuery(name);
     setSuggestions([]);
   };
 
@@ -255,7 +268,9 @@ function MapSearchBar({ onSelect, isDarkMode = true }) {
                   {s.type === "country" ? "🌍" : s.type === "city" || s.addresstype === "city" ? "🏙️" : "📍"}
                 </span>
                 <span style={{ ...mapStyles.suggestionText, color: isDarkMode ? "rgba(255,255,255,0.88)" : "rgba(51,68,85,0.8)" }}>
-                  {s.display_name.split(",").slice(0, 3).join(", ")}
+                  {s.type === "country" || s.addresstype === "country"
+                    ? (s.address?.country || s.display_name.split(",")[0].trim())
+                    : formatCityFromNominatim(s)}
                 </span>
               </li>
             ))}
@@ -511,7 +526,6 @@ function MapPhase({ onConfirm }) {
         >
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <div style={mapStyles.appName}>✈️ Trip Planner AI</div>
-            <ThemeToggle />
           </div>
           <div style={{ ...mapStyles.heroTitle, color: isDarkMode ? "#fff" : "#334455" }}>Where do you want to go?</div>
           <div style={{ ...mapStyles.heroHint, color: isDarkMode ? "rgba(255,255,255,0.45)" : "rgba(100,120,140,0.6)" }}>
@@ -891,7 +905,6 @@ const handleSubmit = async () => {
     <motion.div key="form" initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.45, ease: "easeOut" }} style={styles.wrap}
     >
-      <ThemeToggle />
       <div style={styles.content}>
         {/* Header */}
         <div style={styles.header}>

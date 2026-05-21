@@ -2,7 +2,8 @@ import { useState, useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useIsDarkMode } from "../contexts/ThemeContext";
-import ThemeToggle from "../components/ThemeToggle";
+import { useAuth } from "../contexts/AuthContext";
+import api from "../api";
 
 const TABS = ["Overview", "Hotels", "Experiences", "Food", "Transportation", "Itinerary", "Budget"];
 
@@ -44,6 +45,34 @@ export default function TripPlan() {
   const prefs = loc.state?.preferences;
 
   const [activeTab, setActiveTab] = useState("Overview");
+  const { isLoggedIn } = useAuth();
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [saveErr, setSaveErr] = useState("");
+
+  async function handleSave() {
+    if (!isLoggedIn) { nav("/auth"); return; }
+    setSaving(true);
+    setSaveErr("");
+    try {
+      const dest = prefs?.destination || "Trip";
+      const origin = prefs?.origin || "";
+      await api.post("/trips", {
+        title: `${origin ? origin + " → " : ""}${dest}`,
+        origin: origin,
+        destination: dest,
+        start_date: prefs?.start_date || "",
+        end_date: prefs?.end_date || "",
+        plan: plan,
+        prefs: prefs || {},
+      });
+      setSaved(true);
+    } catch (e) {
+      setSaveErr(e?.response?.data?.detail || "Failed to save trip.");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   if (!plan) {
     return (
@@ -57,13 +86,38 @@ export default function TripPlan() {
   return (
     <>
       <style>{scrollbarCSS}</style>
-      <ThemeToggle />
       <div className="trip-scroll" style={styles.wrap}>
         <div style={styles.content}>
 
           {/* Header */}
           <motion.div initial={{ opacity: 0, y: -16 }} animate={{ opacity: 1, y: 0 }} style={styles.header}>
-            <button style={styles.newTripBtn} onClick={() => nav("/")}>← New Trip</button>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
+              <button style={styles.newTripBtn} onClick={() => nav("/")}>← New Trip</button>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                {isLoggedIn && (
+                  <button style={{ ...styles.newTripBtn, color: "var(--text-muted)" }} onClick={() => nav("/my-trips")}>
+                    My Trips
+                  </button>
+                )}
+                <button
+                  style={{
+                    ...styles.newTripBtn,
+                    background: saved ? "rgba(13,148,136,0.15)" : "var(--cal-accent)",
+                    border: saved ? "1px solid var(--cal-accent)" : "none",
+                    color: "#fff",
+                    opacity: saving ? 0.6 : 1,
+                    cursor: saving ? "not-allowed" : "pointer",
+                  }}
+                  onClick={handleSave}
+                  disabled={saving || saved}
+                >
+                  {saved ? "✓ Saved!" : saving ? "Saving…" : isLoggedIn ? "Save Trip" : "Save Trip"}
+                </button>
+              </div>
+            </div>
+            {saveErr && (
+              <div style={{ fontSize: 12, color: "#f87171", marginBottom: 6 }}>{saveErr}</div>
+            )}
             <div style={styles.destination}>{prefs?.destination || "Your Trip"}</div>
             <div style={styles.dateRow}>
               {prefs?.start_date} → {prefs?.end_date} · {prefs?.group_size} traveler{prefs?.group_size !== 1 ? "s" : ""} · {prefs?.budget?.toLocaleString()} {prefs?.currency}

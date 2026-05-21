@@ -197,25 +197,26 @@ def _build_trip_plan_prompt(preferences: Dict[str, Any]) -> tuple[str, str]:
         if key not in key_rank:
             key_rank[key] = next_r; next_r += 1
 
-    n = len(_budget_cats)
-    weights = {key: max(1, n + 1 - key_rank[key]) for key, _ in _budget_cats}
+    # Exclude transport from percentage allocation — its cost is determined by pricing rules, not preference
+    _alloc_cats = [(k, n) for k, n in _budget_cats if k != "transport_total"]
+    n = len(_alloc_cats)
+    weights = {key: max(1, n + 1 - key_rank[key]) for key, _ in _alloc_cats}
     total_w = sum(weights.values())
-    pcts: Dict[str, float] = {key: weights[key] / total_w for key, _ in _budget_cats}
+    pcts: Dict[str, float] = {key: weights[key] / total_w for key, _ in _alloc_cats}
 
-    # Enforce minimum floors
-    for fk, floor in [("shopping_misc_total", 0.12), ("transport_total", 0.05)]:
-        if pcts[fk] < floor:
-            deficit = floor - pcts[fk]
-            others = [k for k, _ in _budget_cats if k != fk]
-            ot = sum(pcts[k] for k in others)
-            if ot > 0:
-                for k in others:
-                    pcts[k] -= deficit * pcts[k] / ot
-            pcts[fk] = floor
+    # Enforce minimum floor for shopping
+    if pcts.get("shopping_misc_total", 1) < 0.12:
+        deficit = 0.12 - pcts["shopping_misc_total"]
+        others = [k for k, _ in _alloc_cats if k != "shopping_misc_total"]
+        ot = sum(pcts[k] for k in others)
+        if ot > 0:
+            for k in others:
+                pcts[k] -= deficit * pcts[k] / ot
+        pcts["shopping_misc_total"] = 0.12
 
     target_alloc = " | ".join(
         f"{name}: {round(pcts[key] * 100)}%"
-        for key, name in _budget_cats
+        for key, name in _alloc_cats
     )
     priority_allocation = ", ".join(
         f"#{i+1} {p}" for i, p in enumerate(budget_priorities)
@@ -253,9 +254,9 @@ def _build_trip_plan_prompt(preferences: Dict[str, Any]) -> tuple[str, str]:
         "Hotels: realistic rates incl. taxes. Major cities mid-range 180-400+/night. hotels_total = price_per_night × nights.\n"
         "food_spots.avg_price: '~CAD 18-30/person'. popular_dish: one dish. why_popular: 1-2 sentences. review_summary: one line.\n"
         "weather_note: 2 sentences, temp °C/°F, what to pack.\n"
-        f"Budget: priorities={priority_allocation}. Target allocation={target_alloc}. "
-        "Apply each % to EFFECTIVE TOTAL. grand_total = sum of five categories. shopping_misc = Uber,metro,snacks,coffee,tips,souvenirs.\n"
-        "TRANSPORT BUDGET RULES:\n"
+        f"Budget: priorities={priority_allocation}. Target allocation (hotels/activities/food/shopping ONLY, NOT transport)={target_alloc}. "
+        f"Apply each % to EFFECTIVE TOTAL. grand_total = sum of five categories. shopping_misc = Uber,metro,snacks,coffee,tips,souvenirs.\n"
+        "TRANSPORT BUDGET RULES (transport cost is based on real pricing, NOT the allocation percentages above):\n"
         f"- transport_breakdown.local = local transport AT the destination for all {group_size} traveler(s) over {nights} nights "
         "(metro, bus, Uber/taxi within the city). ~10-25/person/day. For car modes, include parking fees here.\n"
         f"- transport_mode is '{transport_mode}'. Apply the matching rule below:\n"
@@ -275,7 +276,9 @@ def _build_trip_plan_prompt(preferences: Dict[str, Any]) -> tuple[str, str]:
         "  BUS_TRAIN: international.min/max = round-trip ticket price (low variability, set min~=max). "
         "international.note = 'Round-trip ticket estimate.'\n"
         "- transport_range.min = international.min + local. transport_range.max = international.max + local.\n"
-        "- transport_total = midpoint: round((international.min + international.max) / 2) + local. Use for grand_total.\n"
+        "- transport_total = round((international.min + international.max) / 2) + local. This is the ONLY way to compute transport_total — do NOT derive it from any percentage or allocation.\n"
+        "- transportation_options[0].priceEstimate.min/max MUST equal transport_breakdown.international.min/max exactly. They describe the same cost.\n"
+        "- grand_total = hotels_total + activities_total + food_total + transport_total + shopping_misc_total.\n"
         f"CABIN (flights only): {cabin_rule} Provide 2-3 options from recommended down to economy. "
         "priceEstimate.source='llm_fallback'. confidence=low|medium|high. "
         "notes must include 'Round-trip estimate' and 'Prices vary by airline and booking date'."
@@ -293,7 +296,8 @@ def _build_trip_plan_prompt(preferences: Dict[str, Any]) -> tuple[str, str]:
         f"GROUP SIZE: {group_size} person(s)\n"
         f"TRANSPORT MODE TO DESTINATION: {transport_mode} (from {origin} to {destination})\n"
         f"ADDITIONAL NOTES: {additional_notes or 'None'}\n\n"
-        "Generate a complete trip plan as JSON. Use EFFECTIVE TOTAL BUDGET for all budget_breakdown totals."
+        "Generate a complete trip plan as JSON. Use EFFECTIVE TOTAL BUDGET for hotels/activities/food/shopping allocations. "
+        "transport_total MUST be derived from the transport pricing rules (midpoint of international range + local), not from the budget percentage."
     )
 
     return instructions, user_input
