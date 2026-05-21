@@ -129,7 +129,7 @@ export default function TripPlan() {
               {activeTab === "Hotels"      && <TabHotels hotels={plan.hotels || []} currency={prefs?.currency} />}
               {activeTab === "Activities"  && <TabActivities activities={plan.activities || []} currency={prefs?.currency} />}
               {activeTab === "Food"        && <TabFood foodSpots={plan.food_spots || []} destination={prefs?.destination} />}
-              {activeTab === "Transportation" && <TabTransportation options={plan.transportation_options || []} currency={prefs?.currency} origin={prefs?.origin} destination={prefs?.destination} />}
+              {activeTab === "Transportation" && <TabTransportation options={plan.transportation_options || []} currency={prefs?.currency} origin={prefs?.origin} destination={prefs?.destination} overrideNote={plan._transport_override} />}
               {activeTab === "Itinerary"   && <TabItinerary itinerary={plan.itinerary || []} currency={prefs?.currency} />}
               {activeTab === "Budget"      && <TabBudget budget={plan.budget_breakdown} prefs={prefs} />}
             </motion.div>
@@ -138,6 +138,25 @@ export default function TripPlan() {
       </div>
     </>
   );
+}
+
+function placeCategoryStyle(category = "") {
+  const c = category.toLowerCase();
+  if (c.includes("park") || c.includes("nature") || c.includes("garden") || c.includes("hike"))
+    return { color: "#4ade80", bg: "rgba(74,222,128,0.1)", border: "rgba(74,222,128,0.3)" };
+  if (c.includes("museum") || c.includes("gallery") || c.includes("art") || c.includes("cultural") || c.includes("culture"))
+    return { color: "#a78bfa", bg: "rgba(167,139,250,0.1)", border: "rgba(167,139,250,0.3)" };
+  if (c.includes("market") || c.includes("shop") || c.includes("bazaar"))
+    return { color: "#fbbf24", bg: "rgba(251,191,36,0.1)", border: "rgba(251,191,36,0.3)" };
+  if (c.includes("beach") || c.includes("waterfront") || c.includes("harbour") || c.includes("lake"))
+    return { color: "#38bdf8", bg: "rgba(56,189,248,0.1)", border: "rgba(56,189,248,0.3)" };
+  if (c.includes("view") || c.includes("lookout") || c.includes("observation"))
+    return { color: "#0d9488", bg: "rgba(13,148,136,0.1)", border: "rgba(13,148,136,0.3)" };
+  if (c.includes("night") || c.includes("bar") || c.includes("entertainment") || c.includes("club"))
+    return { color: "#f472b6", bg: "rgba(244,114,182,0.1)", border: "rgba(244,114,182,0.3)" };
+  if (c.includes("historic") || c.includes("monument") || c.includes("temple") || c.includes("castle"))
+    return { color: "#fb923c", bg: "rgba(251,146,60,0.1)", border: "rgba(251,146,60,0.3)" };
+  return { color: "var(--text-muted)", bg: "rgba(255,255,255,0.06)", border: "rgba(255,255,255,0.15)" };
 }
 
 // ─── Overview Tab ─────────────────────────────────────────────────────────────
@@ -149,34 +168,47 @@ function TabOverview({ plan, prefs }) {
   return (
     <div style={styles.tabContent}>
 
-      {plan.best_neighborhoods?.length > 0 && (
-        <Card title="📍 Best Neighborhoods">
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
-            {plan.best_neighborhoods.map((n, i) => (
-              <a
-                key={i}
-                href={mapsSearch(`${n} ${destination}`)}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{
-                  display: "flex", flexDirection: "column", gap: 4,
-                  padding: "10px 14px", borderRadius: 12,
-                  background: "rgba(13,148,136,0.08)",
-                  border: "1px solid rgba(13,148,136,0.25)",
-                  textDecoration: "none", cursor: "pointer",
-                  transition: "background 0.15s", minWidth: 130,
-                }}
-                onMouseEnter={e => e.currentTarget.style.background = "rgba(13,148,136,0.16)"}
-                onMouseLeave={e => e.currentTarget.style.background = "rgba(13,148,136,0.08)"}
-              >
-                <span style={{ color: "var(--text-primary)", fontWeight: 700, fontSize: "0.88rem" }}>
-                  📍 {n}
-                </span>
-                <span style={{ color: "#0d9488", fontSize: "0.7rem", fontWeight: 600, letterSpacing: "0.02em" }}>
-                  Find on Maps ↗
-                </span>
-              </a>
-            ))}
+      {plan.recommended_places?.length > 0 && (
+        <Card title="🗺️ Recommended Places">
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 10 }}>
+            {plan.recommended_places.map((p, i) => {
+              const { color, bg, border } = placeCategoryStyle(p.category);
+              return (
+                <a
+                  key={i}
+                  href={mapsSearch(`${p.name} ${destination}`)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    display: "flex", flexDirection: "column", gap: 6,
+                    padding: "12px 14px", borderRadius: 12,
+                    background: "rgba(255,255,255,0.04)",
+                    border: "1px solid var(--border-col)",
+                    textDecoration: "none", cursor: "pointer",
+                    transition: "background 0.15s",
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.08)"}
+                  onMouseLeave={e => e.currentTarget.style.background = "rgba(255,255,255,0.04)"}
+                >
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                    <span style={{ color: "var(--text-primary)", fontWeight: 700, fontSize: "0.9rem" }}>{p.name}</span>
+                    {p.category && (
+                      <span style={{
+                        fontSize: "0.68rem", fontWeight: 700, textTransform: "uppercase",
+                        letterSpacing: "0.05em", padding: "2px 8px", borderRadius: 999,
+                        background: bg, border: `1px solid ${border}`, color, flexShrink: 0,
+                      }}>{p.category}</span>
+                    )}
+                  </div>
+                  {p.why && (
+                    <span style={{ color: "var(--text-muted)", fontSize: "0.78rem", lineHeight: 1.45 }}>{p.why}</span>
+                  )}
+                  <span style={{ color: "#0d9488", fontSize: "0.7rem", fontWeight: 600, letterSpacing: "0.02em" }}>
+                    Find on Maps ↗
+                  </span>
+                </a>
+              );
+            })}
           </div>
         </Card>
       )}
@@ -203,19 +235,31 @@ function TabOverview({ plan, prefs }) {
         </Card>
       )}
 
-      {(plan.weather_note || plan.currency_note) && (
-        <SectionRow>
-          {plan.weather_note && (
-            <Card title="🌤️ Weather">
-              <p style={styles.noteText}>{plan.weather_note}</p>
-            </Card>
-          )}
-          {plan.currency_note && (
-            <Card title="💱 Currency">
-              <p style={styles.noteText}>{plan.currency_note}</p>
-            </Card>
-          )}
-        </SectionRow>
+      {plan.weather_note && (
+        <Card title="🌤️ Weather">
+          <ul style={{ margin: 0, padding: "0 0 0 18px", display: "flex", flexDirection: "column", gap: 6 }}>
+            {plan.weather_note
+              .split(/(?<=[.!?])\s+/)
+              .map(s => s.trim())
+              .filter(Boolean)
+              .map((s, i) => (
+                <li key={i} style={{ color: "var(--white)", fontSize: "0.9rem", lineHeight: 1.6 }}>{s}</li>
+              ))}
+          </ul>
+        </Card>
+      )}
+
+      {plan.currency_note && (
+        <div style={{
+          display: "flex", alignItems: "flex-start", gap: 10,
+          padding: "10px 14px", borderRadius: 10,
+          background: "rgba(56,189,248,0.08)",
+          border: "1px solid rgba(56,189,248,0.25)",
+          width: "100%", boxSizing: "border-box",
+        }}>
+          <span style={{ fontSize: "1rem", lineHeight: 1.4, flexShrink: 0 }}>💱</span>
+          <span style={{ color: "var(--white)", fontSize: "0.84rem", lineHeight: 1.55 }}>{plan.currency_note}</span>
+        </div>
       )}
     </div>
   );
@@ -377,10 +421,17 @@ function TabFood({ foodSpots, destination }) {
 
 
 // ─── Transportation Tab ───────────────────────────────────────────────────────
-function TabTransportation({ options, currency, origin, destination }) {
+function TabTransportation({ options, currency, origin, destination, overrideNote }) {
   if (!options.length) return <EmptyState>No transportation options available.</EmptyState>;
   return (
     <div style={styles.tabContent}>
+      {overrideNote && (
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 14px", borderRadius: 10,
+          background: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.3)", marginBottom: 4 }}>
+          <span style={{ fontSize: "1rem", flexShrink: 0 }}>⚠️</span>
+          <span style={{ fontSize: "0.85rem", color: "var(--white)", lineHeight: 1.5 }}>{overrideNote}</span>
+        </div>
+      )}
       {(origin || destination) && (
         <Card>
           <p style={styles.noteText}>From <strong>{origin || "your location"}</strong> to <strong>{destination || "your destination"}</strong></p>
@@ -475,66 +526,222 @@ function TabItinerary({ itinerary, currency }) {
 }
 
 // ─── Budget Tab ───────────────────────────────────────────────────────────────
+function budgetMathNote(key, value, currency, nights, groupSize) {
+  const fmt = (n) => Math.round(n).toLocaleString();
+  const g = groupSize || 1;
+  const n = nights || 1;
+  const perPerson = value / g;
+  switch (key) {
+    case "hotels":
+      return `${currency} ${fmt(perPerson / n)} /person/night × ${n} nights × ${g} traveler${g !== 1 ? "s" : ""}`;
+    case "activities":
+      return `${currency} ${fmt(perPerson)} /person × ${g} traveler${g !== 1 ? "s" : ""}`;
+    case "food":
+      return `${currency} ${fmt(perPerson / n)} /person/day × ${g} traveler${g !== 1 ? "s" : ""} × ${n} days`;
+    case "transport":
+      return `${currency} ${fmt(perPerson)} /person × ${g} traveler${g !== 1 ? "s" : ""}`;
+    case "shopping":
+      return `${currency} ${fmt(perPerson / n)} /person/day × ${g} traveler${g !== 1 ? "s" : ""} × ${n} nights`;
+    default: return null;
+  }
+}
+
+function BudgetRow({ item, total, currency, nights, groupSize, perPersonMode }) {
+  const [hovered, setHovered] = useState(false);
+  const pct = Math.round((item.value / total) * 100);
+  const perPersonVal = Math.round(item.value / groupSize);
+  const primaryVal = perPersonMode ? perPersonVal : item.value;
+  const secondaryVal = perPersonMode ? item.value : (groupSize > 1 ? perPersonVal : null);
+  const secondaryLabel = perPersonMode ? `${currency} ${item.value.toLocaleString()} total` : `${currency} ${perPersonVal.toLocaleString()} /person`;
+  const note = budgetMathNote(item.key, item.value, currency, nights, groupSize);
+  return (
+    <div
+      style={{ ...styles.budgetRow, position: "relative" }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      <div style={styles.budgetRowLabel}>
+        <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          {item.label}
+          {note && <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", opacity: 0.6 }}>ⓘ</span>}
+        </span>
+        <div style={{ textAlign: "right" }}>
+          <div style={{ color: "var(--text-muted)", fontSize: "0.88rem" }}>
+            {currency} {primaryVal.toLocaleString()}
+          </div>
+          {secondaryVal != null && (
+            <div style={{ color: "var(--text-muted)", fontSize: "0.75rem", opacity: 0.55 }}>
+              {secondaryLabel}
+            </div>
+          )}
+        </div>
+      </div>
+      <div style={styles.barTrack}>
+        <motion.div
+          initial={{ width: 0 }}
+          animate={{ width: `${pct}%` }}
+          transition={{ duration: 0.6, ease: "easeOut" }}
+          style={{ ...styles.barFill, background: item.color }}
+        />
+      </div>
+      <div style={styles.barPct}>{pct}%</div>
+      {hovered && note && (
+        <div style={{
+          position: "absolute", left: 0, top: "100%", zIndex: 20,
+          background: "var(--bg-card)", border: "1px solid var(--border-col)",
+          borderRadius: 8, padding: "6px 12px",
+          fontSize: "0.78rem", color: "var(--text-muted)",
+          whiteSpace: "nowrap", marginTop: 4,
+          boxShadow: "0 6px 20px rgba(0,0,0,0.35)",
+          pointerEvents: "none",
+        }}>
+          {note}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function TabBudget({ budget, prefs }) {
   if (!budget) return <EmptyState>No budget breakdown available.</EmptyState>;
 
   const total = budget.grand_total || 1;
+  const nights = (() => {
+    try {
+      const d1 = new Date(prefs?.start_date);
+      const d2 = new Date(prefs?.end_date);
+      return Math.max(1, Math.round((d2 - d1) / 86400000));
+    } catch { return 1; }
+  })();
+  const groupSize = prefs?.group_size ?? 1;
+
+  const perPersonMode = prefs?.budget_type === "per_person";
+  const grandTotal = budget.grand_total ?? 0;
+  const grandPerPerson = Math.round(grandTotal / groupSize);
+
+  const enteredTotal = prefs?.budget
+    ? (perPersonMode ? prefs.budget * groupSize : prefs.budget)
+    : null;
+  const isWithinBudget = enteredTotal != null ? grandTotal <= enteredTotal : isWithinBudget;
+
   const items = [
-    { label: "🏨 Hotels",         value: budget.hotels_total,        color: "#0d9488" },
-    { label: "🎭 Activities",      value: budget.activities_total,    color: "#8b5cf6" },
-    { label: "🍽️ Food",            value: budget.food_total,          color: "#f59e0b" },
-    { label: "🚗 Transport",       value: budget.transport_total,     color: "#3b82f6" },
-    { label: "🛍️ Shopping, Miscellaneous & Incidentals", value: budget.shopping_misc_total, color: "#ec4899" },
+    { key: "hotels",   label: "🏨 Hotels",         value: budget.hotels_total,        color: "#0d9488" },
+    { key: "activities", label: "🎭 Activities",    value: budget.activities_total,    color: "#8b5cf6" },
+    { key: "food",     label: "🍽️ Food",            value: budget.food_total,          color: "#f59e0b" },
+    { key: "transport",label: "🚗 Transportation",   value: budget.transport_total,     color: "#3b82f6" },
+    { key: "shopping", label: "🛍️ Shopping, Miscellaneous & Incidentals", value: budget.shopping_misc_total, color: "#ec4899" },
   ].filter((i) => i.value > 0);
+
+  const PRIORITY_LABELS = {
+    hotels: "🏨 Hotels", activities: "🎭 Activities", food: "🍽️ Food & Dining",
+    transport: "🚗 Transportation", shopping: "🛍️ Shopping", entertainment: "🎵 Entertainment",
+  };
+  const ACTIVITY_LABELS = {
+    outdoor: "🏔️ Outdoor", cultural: "🏛️ Cultural", food_tours: "🍜 Food Tours",
+    nightlife: "🎵 Nightlife", wellness: "🧘 Wellness", art: "🎨 Art & Museums",
+    beach: "🏖️ Beach", nature: "🌿 Nature", adventure: "🏄 Adventure",
+    sightseeing: "📸 Sightseeing", shopping: "🛒 Shopping", family: "👨‍👩‍👧 Family Friendly",
+  };
+
+  const hasPriorities = prefs?.budget_priorities?.length > 0;
+  const hasActivityPrefs = prefs?.activity_preferences?.length > 0;
 
   return (
     <div style={styles.tabContent}>
+
+      {(hasPriorities || hasActivityPrefs) && (
+        <Card title="🎯 Your Preferences">
+          {hasPriorities && (
+            <div style={{ marginBottom: hasActivityPrefs ? 14 : 0 }}>
+              <div style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>
+                Investment Priorities
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                {prefs.budget_priorities.map((p, i) => {
+                  const rankColors = ["#0d9488","#8b5cf6","#f59e0b","#3b82f6","#ec4899","#94a3b8"];
+                  const col = rankColors[i] ?? "#94a3b8";
+                  return (
+                    <div key={i} style={{
+                      display: "flex", alignItems: "center", gap: 6,
+                      padding: "5px 12px", borderRadius: 999,
+                      background: `${col}18`,
+                      border: `1px solid ${col}55`,
+                    }}>
+                      <span style={{ fontSize: "0.7rem", fontWeight: 800, color: col }}>#{i + 1}</span>
+                      <span style={{ fontSize: "0.82rem", color: "var(--white)", fontWeight: 600 }}>
+                        {PRIORITY_LABELS[p] ?? p}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          {hasActivityPrefs && (
+            <div>
+              <div style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>
+                Activity Preferences
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {prefs.activity_preferences.map((a, i) => (
+                  <span key={i} style={{
+                    fontSize: "0.8rem", padding: "4px 12px", borderRadius: 999,
+                    background: "rgba(251,191,36,0.1)", border: "1px solid rgba(251,191,36,0.3)",
+                    color: "#fbbf24", fontWeight: 500,
+                  }}>{ACTIVITY_LABELS[a] ?? a}</span>
+                ))}
+              </div>
+            </div>
+          )}
+        </Card>
+      )}
+
       <Card title="Budget Breakdown">
         <div style={styles.budgetSummary}>
           <div style={{ display: "flex", gap: 24, alignItems: "flex-end", flexWrap: "wrap" }}>
-            <div>
-              <div style={styles.budgetTotal}>{prefs?.currency} {budget.grand_total?.toLocaleString?.() ?? budget.grand_total}</div>
-              <div style={styles.budgetLabel}>Total · {prefs?.group_size ?? 1} traveler{(prefs?.group_size ?? 1) !== 1 ? "s" : ""}</div>
-            </div>
-            {prefs?.group_size > 1 && (
-              <div>
-                <div style={{ ...styles.budgetTotal, fontSize: "1.3rem", color: "var(--text-secondary)" }}>
-                  {prefs?.currency} {Math.round((budget.grand_total ?? 0) / prefs.group_size).toLocaleString()}
+            {perPersonMode ? (
+              <>
+                <div>
+                  <div style={styles.budgetTotal}>{prefs?.currency} {grandPerPerson.toLocaleString()}</div>
+                  <div style={styles.budgetLabel}>Per person</div>
                 </div>
-                <div style={styles.budgetLabel}>Per person</div>
-              </div>
+                <div>
+                  <div style={{ ...styles.budgetTotal, fontSize: "1.3rem", color: "var(--text-secondary)" }}>
+                    {prefs?.currency} {grandTotal.toLocaleString()}
+                  </div>
+                  <div style={styles.budgetLabel}>Total · {groupSize} travelers</div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div>
+                  <div style={styles.budgetTotal}>{prefs?.currency} {grandTotal.toLocaleString()}</div>
+                  <div style={styles.budgetLabel}>Total · {groupSize} traveler{groupSize !== 1 ? "s" : ""}</div>
+                </div>
+                {groupSize > 1 && (
+                  <div>
+                    <div style={{ ...styles.budgetTotal, fontSize: "1.3rem", color: "var(--text-secondary)" }}>
+                      {prefs?.currency} {grandPerPerson.toLocaleString()}
+                    </div>
+                    <div style={styles.budgetLabel}>Per person</div>
+                  </div>
+                )}
+              </>
             )}
           </div>
           <div style={{
             ...styles.budgetBadge,
-            background: budget.within_budget ? "rgba(13,148,136,0.15)" : "rgba(239,68,68,0.15)",
-            border: `1px solid ${budget.within_budget ? "var(--cal-accent)" : "#ef4444"}`,
-            color: budget.within_budget ? "var(--cal-accent-fg)" : "#fca5a5",
+            background: isWithinBudget ? "rgba(13,148,136,0.15)" : "rgba(239,68,68,0.15)",
+            border: `1px solid ${isWithinBudget ? "var(--cal-accent)" : "#ef4444"}`,
+            color: isWithinBudget ? "var(--cal-accent-fg)" : "#fca5a5",
           }}>
-            {budget.within_budget ? "✅ Within Budget" : "⚠️ Over Budget"}
+            {isWithinBudget ? "✅ Within Budget" : "⚠️ Over Budget"}
           </div>
         </div>
 
-        {items.map((item) => {
-          const pct = Math.round((item.value / total) * 100);
-          return (
-            <div key={item.label} style={styles.budgetRow}>
-              <div style={styles.budgetRowLabel}>
-                <span>{item.label}</span>
-                <span style={{ color: "var(--text-muted)" }}>{prefs?.currency} {item.value?.toLocaleString?.() ?? item.value}</span>
-              </div>
-              <div style={styles.barTrack}>
-                <motion.div
-                  initial={{ width: 0 }}
-                  animate={{ width: `${pct}%` }}
-                  transition={{ duration: 0.6, ease: "easeOut" }}
-                  style={{ ...styles.barFill, background: item.color }}
-                />
-              </div>
-              <div style={styles.barPct}>{pct}%</div>
-            </div>
-          );
-        })}
+        {items.map((item) => (
+          <BudgetRow key={item.key} item={item} total={total} currency={prefs?.currency} nights={nights} groupSize={groupSize} perPersonMode={perPersonMode} />
+        ))}
 
         {budget.savings_tip && (
           <div style={styles.savingsTip}>
@@ -561,8 +768,8 @@ function TabBudget({ budget, prefs }) {
                 <CompareRow label="Your Budget (total)" value={enteredTotal} currency={prefs.currency} color="var(--cal-accent)" />
                 {groupSize > 1 && <CompareRow label="Your Budget (per person)" value={Math.round(enteredPerPerson)} currency={prefs.currency} color="var(--cal-accent)" dim />}
                 <div style={styles.divider} />
-                <CompareRow label="AI Estimate (total)" value={estimateTotal} currency={prefs.currency} color={budget.within_budget ? "#10b981" : "#ef4444"} />
-                {groupSize > 1 && <CompareRow label="AI Estimate (per person)" value={Math.round(estimatePerPerson)} currency={prefs.currency} color={budget.within_budget ? "#10b981" : "#ef4444"} dim />}
+                <CompareRow label="AI Estimate (total)" value={estimateTotal} currency={prefs.currency} color={isWithinBudget ? "#10b981" : "#ef4444"} />
+                {groupSize > 1 && <CompareRow label="AI Estimate (per person)" value={Math.round(estimatePerPerson)} currency={prefs.currency} color={isWithinBudget ? "#10b981" : "#ef4444"} dim />}
                 <div style={styles.divider} />
                 <CompareRow
                   label={diff >= 0 ? "Remaining" : "Overage"}
@@ -570,6 +777,45 @@ function TabBudget({ budget, prefs }) {
                   currency={prefs.currency}
                   color={diff >= 0 ? "#10b981" : "#ef4444"}
                 />
+              </div>
+            );
+          })()}
+          {(() => {
+            const enteredTotal = prefs.budget_type === "per_person"
+              ? prefs.budget * (prefs.group_size ?? 1)
+              : prefs.budget;
+            const diff = enteredTotal - (budget.grand_total ?? 0);
+            const pct = enteredTotal > 0 ? Math.abs(diff) / enteredTotal : 0;
+            if (pct < 0.08) return null;
+            const isUnder = diff > 0;
+
+            const categoryNames = { hotels: "Hotels", activities: "Activities", food: "Food & Dining", transport: "Transportation", shopping: "Shopping & Misc" };
+            const userPriorities = new Set((prefs?.budget_priorities || []).map(p => p.toLowerCase()));
+            const nonPriority = Object.entries(categoryNames)
+              .filter(([key]) => !userPriorities.has(key))
+              .map(([, name]) => name);
+            const upgradeTargets = nonPriority.length > 0
+              ? nonPriority.slice(0, 3).join(", ")
+              : "other categories";
+
+            return (
+              <div style={{
+                marginTop: 14, padding: "10px 14px", borderRadius: 10,
+                background: isUnder ? "rgba(56,189,248,0.08)" : "rgba(239,68,68,0.08)",
+                border: `1px solid ${isUnder ? "rgba(56,189,248,0.3)" : "rgba(239,68,68,0.3)"}`,
+                fontSize: "0.84rem", color: "var(--white)", lineHeight: 1.55,
+              }}>
+                {isUnder ? (
+                  <>
+                    <span style={{ fontWeight: 700, color: "#38bdf8" }}>ℹ️ Budget not fully used: </span>
+                    You have <strong>{prefs.currency} {Math.round(diff).toLocaleString()}</strong> remaining. Consider allocating more toward <strong>{upgradeTargets}</strong> — there's room to upgrade.
+                  </>
+                ) : (
+                  <>
+                    <span style={{ fontWeight: 700, color: "#f87171" }}>⚠️ Over your budget: </span>
+                    This plan exceeds your budget by <strong>{prefs.currency} {Math.round(Math.abs(diff)).toLocaleString()}</strong>. Consider trimming <strong>{upgradeTargets}</strong> to stay within budget.
+                  </>
+                )}
               </div>
             );
           })()}

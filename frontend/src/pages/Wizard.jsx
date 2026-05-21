@@ -1,7 +1,7 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { DayPicker } from "react-day-picker";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, Reorder } from "framer-motion";
 import { ComposableMap, Geographies, Geography, ZoomableGroup, Marker as MapMarker } from "react-simple-maps";
 import "react-day-picker/dist/style.css";
 import api from "../api";
@@ -640,10 +640,10 @@ function StepDots({ step }) {
 }
 
 // ─── StepBox — unified shell for all 3 steps ─────────────────────────────────
-// Constrains height to viewport, scrolls content internally, nav bar always visible
 function StepBox({ children, onBack, backLabel = "← Back", onNext, onSubmit, loading, err, isLast }) {
   const isDarkMode = useIsDarkMode();
   const borderColor = isDarkMode ? "rgba(255,255,255,0.12)" : "rgba(168,207,223,0.35)";
+  const isGenerating = loading && isLast;
 
   return (
     <div style={{
@@ -655,49 +655,63 @@ function StepBox({ children, onBack, backLabel = "← Back", onNext, onSubmit, l
       display: "flex",
       flexDirection: "column",
       minHeight: 0,
-      overflow: "visible",   // remove maxHeight entirely
+      overflow: "visible",
     }}>
-      {/* Scrollable content */}
-      <div style={{ flex: 1, overflowY: "auto", padding: "18px 22px 8px" }}>
-        {children}
+      {/* Content area — replaced by robot overlay when generating */}
+      <div style={{ flex: 1, overflowY: isGenerating ? "hidden" : "auto", padding: "18px 22px 8px" }}>
+        {isGenerating ? <GeneratingOverlay /> : children}
       </div>
 
-      {/* Error (inside box, above nav) */}
-      {err && (
+      {/* Error */}
+      {!isGenerating && err && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
           style={{ ...styles.errBox, margin: "0 22px 0", flexShrink: 0 }}
         >{err}</motion.div>
       )}
 
-      {/* Nav bar — sticky at bottom of box */}
-      <div style={{
-        display: "flex", alignItems: "center", gap: 10,
-        padding: "12px 22px 14px",
-        borderTop: `1px solid ${borderColor}`,
-        flexShrink: 0,
-        marginTop: 8,
-      }}>
-        <button type="button" style={styles.backBtn} onClick={onBack} disabled={loading}>
-          {backLabel}
-        </button>
-        <div style={{ flex: 1 }} />
-        {isLast ? (
-          <button type="button"
-            style={{ ...styles.nextBtn, minWidth: 200, justifyContent: "center" }}
-            onClick={onSubmit} disabled={loading}
+      {/* Nav bar — hidden while generating */}
+      {!isGenerating && (
+        <div style={{
+          display: "flex", alignItems: "center", gap: 12,
+          padding: "14px 22px 16px",
+          borderTop: `1px solid ${borderColor}`,
+          flexShrink: 0,
+          marginTop: 8,
+        }}>
+          <motion.button
+            type="button"
+            whileHover={{ scale: 1.03, background: isDarkMode ? "rgba(255,255,255,0.06)" : "rgba(168,207,223,0.2)" }}
+            whileTap={{ scale: 0.97 }}
+            style={styles.backBtn}
+            onClick={onBack}
+            disabled={loading}
           >
-            {loading ? <><LoadingDots /> Generating…</> : "✈️ Generate My Trip Plan"}
-          </button>
-        ) : (
-          <button type="button" style={styles.nextBtn} onClick={onNext} disabled={loading}>
-            Next →
-          </button>
-        )}
-      </div>
-
-      {loading && (
-        <div style={{ ...styles.loadingNote, padding: "0 22px 10px", flexShrink: 0 }}>
-          AI is crafting your personalized plan. This may take 1 to 2 minutes . . .
+            {backLabel}
+          </motion.button>
+          <div style={{ flex: 1 }} />
+          {isLast ? (
+            <motion.button
+              type="button"
+              whileHover={{ scale: 1.04, boxShadow: "0 8px 32px rgba(13,148,136,0.6)" }}
+              whileTap={{ scale: 0.97 }}
+              style={styles.generateBtn}
+              onClick={onSubmit}
+              disabled={loading}
+            >
+              ✈️ Generate My Trip Plan
+            </motion.button>
+          ) : (
+            <motion.button
+              type="button"
+              whileHover={{ scale: 1.04 }}
+              whileTap={{ scale: 0.97 }}
+              style={styles.nextBtn}
+              onClick={onNext}
+              disabled={loading}
+            >
+              Next →
+            </motion.button>
+          )}
         </div>
       )}
     </div>
@@ -723,7 +737,8 @@ export default function Wizard() {
   const [budget, setBudget]       = useState("");
   const [budgetType, setBudgetType] = useState("total");
   const [currency, setCurrency]   = useState("CAD");
-  const [budgetPriorities, setBudgetPriorities] = useState([]);
+  const [transportMode, setTransportMode] = useState("flight");
+  const [budgetPriorities, setBudgetPriorities] = useState(BUDGET_PRIORITIES.map(p => p.id));
   const [activityPrefs, setActivityPrefs]       = useState([]);
   const [tripType, setTripType]   = useState("solo");
   const [groupSize, setGroupSize] = useState(1);
@@ -768,6 +783,7 @@ const handleSubmit = async () => {
       budget_priorities: budgetPriorities,
       activity_preferences: activityPrefs,
       trip_type: tripType, group_size: Number(groupSize),
+      transport_mode: transportMode,
       additional_notes: notes.trim() || null,
     };
     const res = await api.post("/plan", payload);
@@ -838,6 +854,7 @@ const handleSubmit = async () => {
                     budgetType={budgetType} setBudgetType={setBudgetType}
                     groupSize={groupSize}
                     currency={currency} setCurrency={setCurrency}
+                    transportMode={transportMode} setTransportMode={setTransportMode}
                   />
                 </StepBox>
               )}
@@ -845,7 +862,7 @@ const handleSubmit = async () => {
                 <StepBox onBack={handleBack} onNext={handleNext} loading={loading} err={err}>
                   <StepPreferences
                     budgetPriorities={budgetPriorities}
-                    togglePriority={(id) => toggleTag(budgetPriorities, setBudgetPriorities, id)}
+                    setBudgetPriorities={setBudgetPriorities}
                     activityPrefs={activityPrefs}
                     toggleActivity={(id) => toggleTag(activityPrefs, setActivityPrefs, id)}
                   />
@@ -871,9 +888,17 @@ const handleSubmit = async () => {
 // ─── Step Content ─────────────────────────────────────────────────────────────
 
 
+const TRANSPORT_MODES = [
+  { id: "flight",     label: "✈️ Flight",      hint: "Round-trip airfare included" },
+  { id: "own_car",    label: "🚗 Own Car",      hint: "Gas, tolls & parking only" },
+  { id: "car_rental", label: "🚙 Car Rental",   hint: "Rental + gas costs included" },
+  { id: "bus_train",  label: "🚌 Bus / Train",  hint: "Ticket cost included" },
+];
+
 function StepDatesAndBudget({
   origin, setOrigin, dateRange, setDateRange, showCal, setShowCal, calMonth, setCalMonth,
   budget, setBudget, budgetType, setBudgetType, groupSize, currency, setCurrency,
+  transportMode, setTransportMode,
 }) {
   const isDarkMode = useIsDarkMode();
   const inputBg     = isDarkMode ? "rgba(255,255,255,0.04)" : "rgba(168,207,223,0.12)";
@@ -970,7 +995,39 @@ function StepDatesAndBudget({
         </div>
       </div>
 
-      {/* Row 2: date trigger + full-width calendar below */}
+      {/* Row 2: transport mode */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <div style={styles.stepTitle}>How are you getting there?</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 8 }}>
+          {TRANSPORT_MODES.map(({ id, label, hint }) => {
+            const sel = transportMode === id;
+            return (
+              <button key={id} type="button" onClick={() => setTransportMode(id)} style={{
+                display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 3,
+                padding: "10px 14px", borderRadius: 10, cursor: "pointer", textAlign: "left",
+                background: sel ? "rgba(13,148,136,0.12)" : inputBg,
+                border: `1px solid ${sel ? "var(--cal-accent)" : panelBorder.replace("1px solid ", "")}`,
+                transition: "all 0.15s",
+              }}>
+                <span style={{ fontSize: "0.92rem", fontWeight: sel ? 700 : 500, color: sel ? "var(--cal-accent-fg)" : "var(--white)", fontFamily: '"Pixelify Sans", sans-serif' }}>
+                  {label}
+                </span>
+                <span style={{ fontSize: "0.72rem", color: sel ? "var(--cal-accent)" : "var(--text-muted)" }}>
+                  {hint}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 2, padding: "7px 11px", borderRadius: 8, background: "rgba(56,189,248,0.07)", border: "1px solid rgba(56,189,248,0.18)" }}>
+          <span style={{ fontSize: "0.78rem" }}>ℹ️</span>
+          <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", lineHeight: 1.45 }}>
+            If your selection isn't practical for the route (e.g. driving overseas), the AI will automatically switch to the best alternative and note it in your plan.
+          </span>
+        </div>
+      </div>
+
+      {/* Row 3: date trigger + full-width calendar below */}
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         <div style={styles.stepTitle}>When are you traveling?</div>
         <button type="button"
@@ -1008,30 +1065,60 @@ function StepDatesAndBudget({
 
 
 
-function StepPreferences({ budgetPriorities, togglePriority, activityPrefs, toggleActivity }) {
+const RANK_COLORS = ["#0d9488", "#8b5cf6", "#f59e0b", "#3b82f6", "#ec4899", "#94a3b8"];
+
+function StepPreferences({ budgetPriorities, setBudgetPriorities, activityPrefs, toggleActivity }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14, paddingBottom: 6 }}>
       <div style={styles.stepLabel}>Step 2 of 3</div>
-      <div style={styles.stepTitle}>What do you invest most in?</div>
-      <div style={styles.stepHint}>Select your priorities in order — numbers show rank</div>
-      <div style={styles.tagGrid}>
-        {BUDGET_PRIORITIES.map((p) => {
-          const idx = budgetPriorities.indexOf(p.id);
-          const sel = idx !== -1;
+      <div style={styles.stepTitle}>Rank your investment priorities</div>
+      <div style={styles.stepHint}>Drag to reorder — #1 receives the largest budget share</div>
+
+      <Reorder.Group
+        axis="y"
+        values={budgetPriorities}
+        onReorder={setBudgetPriorities}
+        style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 6 }}
+      >
+        {budgetPriorities.map((id, index) => {
+          const item = BUDGET_PRIORITIES.find(p => p.id === id);
+          const rankColor = RANK_COLORS[index] ?? "#94a3b8";
           return (
-            <button key={p.id} type="button" onClick={() => togglePriority(p.id)} style={{
-              ...styles.tag, position: "relative",
-              background: sel ? "var(--cal-accent)" : "var(--bg-card)",
-              border:     sel ? "1px solid var(--cal-accent)" : "1px solid var(--border-col)",
-              color:      sel ? "#fff" : "var(--white)",
-              fontWeight: sel ? 700 : 400,
-            }}>
-              {sel && <span style={styles.tagRank}>{idx + 1}</span>}
-              {p.label}
-            </button>
+            <Reorder.Item
+              key={id}
+              value={id}
+              style={{ listStyle: "none" }}
+              initial={false}
+              animate={{ scale: 1, boxShadow: "0px 0px 0px rgba(0,0,0,0)" }}
+              whileDrag={{ scale: 1.03, boxShadow: "0px 10px 28px rgba(0,0,0,0.28)" }}
+              transition={{ duration: 0.15 }}
+            >
+              <div style={{
+                display: "flex", alignItems: "center", gap: 12,
+                padding: "11px 14px", borderRadius: 11,
+                background: "var(--bg-card)", border: "1px solid var(--border-col)",
+                cursor: "grab", userSelect: "none",
+              }}>
+                <div style={{
+                  minWidth: 28, height: 28, borderRadius: "50%",
+                  background: rankColor, display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: "0.82rem", fontWeight: 900, color: "#fff", flexShrink: 0,
+                  fontFamily: '"Pixelify Sans", sans-serif',
+                }}>
+                  {index + 1}
+                </div>
+                <span style={{ flex: 1, fontSize: "0.95rem", color: "var(--white)", fontWeight: 500 }}>
+                  {item?.label}
+                </span>
+                <span style={{ color: "var(--text-muted)", fontSize: "1.1rem", letterSpacing: "0.05em", opacity: 0.4 }}>
+                  ⠿
+                </span>
+              </div>
+            </Reorder.Item>
           );
         })}
-      </div>
+      </Reorder.Group>
+
       <div style={styles.divider} />
       <div style={styles.stepTitle}>What activities do you enjoy?</div>
       <div style={styles.tagGrid}>
@@ -1081,17 +1168,77 @@ function StepTripDetails({ tripType, setTripType, groupSize, setGroupSize, notes
   );
 }
 
-function LoadingDots() {
+function GeneratingOverlay() {
+  const msgs = [
+    "Researching the best hotels for you...",
+    "Mapping out your day-by-day itinerary...",
+    "Hunting down top restaurants...",
+    "Crunching the numbers on your budget...",
+    "Discovering local hidden gems...",
+    "Scouting activities that match your style...",
+    "Finalizing your perfect trip plan...",
+  ];
+  const [msgIdx, setMsgIdx] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setMsgIdx((i) => (i + 1) % msgs.length), 2800);
+    return () => clearInterval(t);
+  }, []);
+
   return (
-    <span style={{ display: "flex", gap: 4, alignItems: "center" }}>
-      {[0, 1, 2].map((i) => (
-        <motion.span key={i}
-          style={{ width: 6, height: 6, borderRadius: "50%", background: "#fff", display: "inline-block" }}
-          animate={{ opacity: [0.3, 1, 0.3], y: [0, -4, 0] }}
-          transition={{ duration: 0.8, repeat: Infinity, delay: i * 0.2 }} outsideda
-        />
-      ))}
-    </span>
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "36px 20px 28px", gap: 20 }}>
+      {/* Robot + spinning gears */}
+      <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
+        <motion.span
+          animate={{ rotate: 360 }}
+          transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
+          style={{ fontSize: "2rem", display: "inline-block", opacity: 0.7 }}
+        >⚙️</motion.span>
+
+        <motion.div
+          animate={{ y: [0, -14, 0], rotate: [0, -4, 4, 0] }}
+          transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+          style={{ fontSize: "5rem", lineHeight: 1, filter: "drop-shadow(0 0 18px rgba(13,148,136,0.55))" }}
+        >🤖</motion.div>
+
+        <motion.span
+          animate={{ rotate: -360 }}
+          transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
+          style={{ fontSize: "2rem", display: "inline-block", opacity: 0.7 }}
+        >⚙️</motion.span>
+      </div>
+
+      {/* Rotating message */}
+      <div style={{ height: 28, display: "flex", alignItems: "center", overflow: "hidden" }}>
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={msgIdx}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.35 }}
+            style={{ fontSize: "0.92rem", color: "var(--white)", fontWeight: 600, textAlign: "center", whiteSpace: "nowrap" }}
+          >
+            {msgs[msgIdx]}
+          </motion.div>
+        </AnimatePresence>
+      </div>
+
+      {/* Animated bar segments */}
+      <div style={{ display: "flex", gap: 5 }}>
+        {[0, 1, 2, 3, 4, 5].map((i) => (
+          <motion.div
+            key={i}
+            animate={{ scaleY: [0.4, 1.4, 0.4], opacity: [0.35, 1, 0.35] }}
+            transition={{ duration: 1, repeat: Infinity, delay: i * 0.15, ease: "easeInOut" }}
+            style={{ width: 6, height: 22, borderRadius: 3, background: "var(--cal-accent)", transformOrigin: "center" }}
+          />
+        ))}
+      </div>
+
+      <div style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginTop: -4 }}>
+        This may take 1–2 minutes
+      </div>
+    </div>
   );
 }
 
@@ -1240,17 +1387,28 @@ content: {
   readyTitle: { fontSize: "1rem", fontWeight: 700, fontFamily: '"Pixelify Sans", sans-serif', color: "var(--cal-accent-fg)", marginBottom: 5 },
   readyText: { fontSize: "0.88rem", color: "var(--text-muted)", lineHeight: 1.6 },
   backBtn: {
-    padding: "10px 18px", borderRadius: 10,
+    padding: "13px 26px", borderRadius: 12,
     border: "1px solid var(--border-col)", background: "transparent",
-    color: "var(--white)", fontSize: "0.95rem", cursor: "pointer",
+    color: "var(--white)", fontSize: "1rem", cursor: "pointer",
     fontFamily: '"Pixelify Sans", sans-serif', flexShrink: 0,
+    transition: "background 0.2s, border-color 0.2s",
   },
   nextBtn: {
-    padding: "10px 24px", borderRadius: 10, border: "none",
+    padding: "13px 30px", borderRadius: 12, border: "none",
     background: "var(--cal-accent)", color: "#fff",
-    fontSize: "0.95rem", fontWeight: 700, cursor: "pointer",
+    fontSize: "1rem", fontWeight: 700, cursor: "pointer",
     fontFamily: '"Pixelify Sans", sans-serif',
     display: "flex", alignItems: "center", gap: 8, flexShrink: 0,
+    boxShadow: "0 4px 18px rgba(13,148,136,0.4)",
+  },
+  generateBtn: {
+    padding: "15px 40px", borderRadius: 14, border: "none",
+    background: "linear-gradient(135deg, #0d9488 0%, #0891b2 100%)",
+    color: "#fff", fontSize: "1.1rem", fontWeight: 700, cursor: "pointer",
+    fontFamily: '"Pixelify Sans", sans-serif',
+    display: "flex", alignItems: "center", gap: 10, flexShrink: 0,
+    boxShadow: "0 6px 24px rgba(13,148,136,0.5)",
+    letterSpacing: "0.02em",
   },
   errBox: {
     background: "rgba(255,100,100,0.12)", border: "1px solid rgba(255,100,100,0.35)",

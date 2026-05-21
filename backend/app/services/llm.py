@@ -70,7 +70,7 @@ def _default_trip_plan(raw_text: str) -> Dict[str, Any]:
             "grand_total": 0, "within_budget": True, "savings_tip": ""
         },
         "local_tips": [],
-        "best_neighborhoods": [],
+        "recommended_places": [],
         "must_try_foods": [],
         "weather_note": "",
         "currency_note": "",
@@ -110,11 +110,41 @@ def _parse_trip_plan_payload(raw: str) -> Dict[str, Any]:
 
 
 
+def _resolve_transport_mode(origin: str, destination: str, transport_mode: str) -> tuple[str, Optional[str]]:
+    """
+    Returns (effective_mode, override_reason).
+    If user chose own_car/car_rental but the route requires crossing an ocean,
+    we force 'flight' and return a reason string.
+    """
+    if transport_mode not in ("own_car", "car_rental"):
+        return transport_mode, None
+
+    check = _responses_text(
+        instructions="You are a geography expert. Answer with only YES or NO.",
+        user_input=(
+            f"Can a person physically drive by land from '{origin}' to '{destination}' "
+            "without crossing any ocean? Consider all land borders and road connections. "
+            "Answer YES only if a continuous land/road route exists."
+        ),
+        max_output_tokens=5,
+    )
+    if check.strip().upper().startswith("Y"):
+        return transport_mode, None
+
+    label = "Own Car" if transport_mode == "own_car" else "Car Rental"
+    reason = (
+        f"{label} isn't feasible for this route (no drivable land connection between "
+        f"{origin} and {destination}). Switched to flight automatically."
+    )
+    return "flight", reason
+
+
 def generate_trip_plan(preferences: Dict[str, Any]) -> Dict[str, Any]:
     """
     Generate a full trip plan from user preferences.
     Returns a structured dict with hotels, activities, itinerary, budget breakdown, and tips.
     """
+    origin = preferences.get("origin", "")
     destination = preferences.get("destination", "")
     start_date = preferences.get("start_date", "")
     end_date = preferences.get("end_date", "")
@@ -126,6 +156,10 @@ def generate_trip_plan(preferences: Dict[str, Any]) -> Dict[str, Any]:
     group_size = preferences.get("group_size", 1)
     budget_type = preferences.get("budget_type", "total")
     additional_notes = preferences.get("additional_notes", "")
+    raw_transport_mode = preferences.get("transport_mode", "flight")
+
+    # Validate transport feasibility before sending to main LLM
+    transport_mode, transport_override_reason = _resolve_transport_mode(origin, destination, raw_transport_mode)
 
     effective_total = budget * group_size if budget_type == "per_person" else budget
     per_person = budget if budget_type == "per_person" else (budget / max(group_size, 1))
@@ -147,10 +181,48 @@ def generate_trip_plan(preferences: Dict[str, Any]) -> Dict[str, Any]:
         "transportation": "transport_total", "transport": "transport_total",
         "shopping": "shopping_misc_total", "entertainment": "activities_total",
     }
+
+    # Formula-based allocation: linear weights from rank, with minimum floors
+    _budget_cats = [
+        ("hotels_total",       "hotels"),
+        ("activities_total",   "activities"),
+        ("food_total",         "food"),
+        ("transport_total",    "transport"),
+        ("shopping_misc_total","shopping_misc"),
+    ]
+    key_rank: Dict[str, int] = {}
+    for i, p in enumerate(budget_priorities):
+        mapped = _priority_map.get(p.lower().strip())
+        if mapped and mapped not in key_rank:
+            key_rank[mapped] = i + 1
+    next_r = len(budget_priorities) + 1
+    for key, _ in _budget_cats:
+        if key not in key_rank:
+            key_rank[key] = next_r; next_r += 1
+
+    n = len(_budget_cats)
+    weights = {key: max(1, n + 1 - key_rank[key]) for key, _ in _budget_cats}
+    total_w = sum(weights.values())
+    pcts: Dict[str, float] = {key: weights[key] / total_w for key, _ in _budget_cats}
+
+    # Enforce minimum floors
+    for fk, floor in [("shopping_misc_total", 0.12), ("transport_total", 0.05)]:
+        if pcts[fk] < floor:
+            deficit = floor - pcts[fk]
+            others = [k for k, _ in _budget_cats if k != fk]
+            ot = sum(pcts[k] for k in others)
+            if ot > 0:
+                for k in others:
+                    pcts[k] -= deficit * pcts[k] / ot
+            pcts[fk] = floor
+
+    target_alloc = " | ".join(
+        f"{name}: {round(pcts[key] * 100)}%"
+        for key, name in _budget_cats
+    )
     priority_allocation = ", ".join(
-        f"#{i+1} {p} → boost {_priority_map.get(p.lower().strip(), p.lower())}"
-        for i, p in enumerate(budget_priorities)
-    ) if budget_priorities else "no specific priorities"
+        f"#{i+1} {p}" for i, p in enumerate(budget_priorities)
+    ) if budget_priorities else "none"
 
     instructions = (
         "You are an expert travel planner. Output STRICT JSON only — no markdown fences, no extra text.\n"
@@ -162,20 +234,32 @@ def generate_trip_plan(preferences: Dict[str, Any]) -> Dict[str, Any]:
         ' "itinerary": [{"day": number, "date": string, "theme": string, "morning": string, "afternoon": string, "evening": string, "meals": {"breakfast": string, "lunch": string, "dinner": string}, "estimated_daily_cost": number}],\n'
         ' "budget_breakdown": {"hotels_total": number, "activities_total": number, "food_total": number, "transport_total": number, "shopping_misc_total": number, "grand_total": number, "within_budget": boolean, "savings_tip": string},\n'
         ' "transportation_options": [{"mode": string, "estimated_cost_per_group": number, "duration": string, "why": string, "notes": string}],\n'
-        ' "local_tips": [string], "best_neighborhoods": [string], "must_try_foods": [{"type": string, "dish": string}], "weather_note": string, "currency_note": string}\n'
+        ' "local_tips": [string], "recommended_places": [{"name": string, "category": string, "why": string, "neighborhood": string}], "must_try_foods": [{"type": string, "dish": string}], "weather_note": string, "currency_note": string}\n'
         f"Generate EXACTLY {nights} itinerary days, 5 hotels, 8-10 activities, 10 food_spots, 8-10 must_try_foods. "
         "All prices in user's currency. Use real place names. "
+        "HOTEL PRICING: use realistic current market rates — do NOT underestimate. "
+        "Include taxes (12–18%), resort/destination fees, and seasonal demand in price_per_night. "
+        "For major cities (Vancouver, Toronto, NYC, London, Paris, Tokyo, Sydney) expect CAD/USD/EUR 180–400+/night for mid-range, 350–700+ for upscale. "
+        "hotels_total = price_per_night × nights (already inclusive of all fees). "
         "food_spots.avg_price: number range e.g. '~CAD 18–30/person'. "
         "food_spots.popular_dish: single signature dish. "
         "food_spots.why_popular: 2–3 vivid sentences on atmosphere and must-orders. "
         "food_spots.review_summary: one punchy critic line. "
+        "recommended_places: 6–8 specific real venues/attractions. "
+        "Prioritize categories that match activity_preferences; if none or to fill remaining slots, diversify across: Park, Museum, Market, Viewpoint, Beach, Cultural Site, Nightlife, Historic Site. "
+        "recommended_places[].category: short label e.g. 'Park', 'Museum', 'Market', 'Viewpoint'. "
+        "recommended_places[].why: 1 vivid sentence on why it's worth visiting. "
         "must_try_foods.type: cuisine/restaurant category. must_try_foods.dish: signature dish. "
         "weather_note: 2–3 sentences with temp in °C and °F, conditions, what to pack. "
         "budget_breakdown totals = TOTAL GROUP SPEND. grand_total = exact sum of five categories. "
-        f"Budget allocation — user priorities in order: {priority_allocation}. "
-        "Default ranges: hotels 30–40%, activities 20–25%, food 12–18%, transport 8–12%, shopping_misc 15–20%. "
-        "Shift 5–10% extra toward top-ranked priorities, reduce lower-ranked ones. "
-        "shopping_misc covers Uber, metro, snacks, coffee, tips, souvenirs — never below 12%."
+        f"User investment priorities (ranked): {priority_allocation}. "
+        f"TARGET budget allocation (follow these percentages): {target_alloc}. "
+        "Apply each target % to EFFECTIVE TOTAL BUDGET to get the category total. "
+        "shopping_misc covers Uber, metro, snacks, coffee, tips, souvenirs. "
+        f"transport_total = round-trip cost to reach destination ({transport_mode}) + local in-city transport. "
+        "flight: realistic round-trip airfare. car_rental: rental fee + gas. own_car: gas + tolls + parking only. bus_train: round-trip ticket cost. "
+        "IMPORTANT: if the chosen transport_mode is not feasible for this route (e.g. own_car/car_rental for overseas or cross-ocean travel, flight for a short same-city drive), "
+        "silently use the most practical alternative instead and note the change in transportation_options[0].notes."
     )
 
     user_input = (
@@ -188,6 +272,7 @@ def generate_trip_plan(preferences: Dict[str, Any]) -> Dict[str, Any]:
         f"ACTIVITY PREFERENCES: {', '.join(activity_preferences)}\n"
         f"TRIP TYPE: {trip_type}\n"
         f"GROUP SIZE: {group_size} person(s)\n"
+        f"TRANSPORT MODE TO DESTINATION: {transport_mode} (from {origin} to {destination})\n"
         f"ADDITIONAL NOTES: {additional_notes or 'None'}\n\n"
         "Generate a complete trip plan as JSON. Use EFFECTIVE TOTAL BUDGET for all budget_breakdown totals."
     )
@@ -198,6 +283,8 @@ def generate_trip_plan(preferences: Dict[str, Any]) -> Dict[str, Any]:
     print("=== PARSED KEYS ===", {k: (len(v) if isinstance(v, list) else type(v).__name__) for k, v in result.items() if k not in ("_raw",)})
     if result.get("_parse_error"):
         print("=== PARSE FAILED — raw tail ===", raw[-300:])
+    if transport_override_reason:
+        result["_transport_override"] = transport_override_reason
     return result
 
 

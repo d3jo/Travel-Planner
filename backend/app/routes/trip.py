@@ -23,6 +23,7 @@ class TripPreferences(BaseModel):
     trip_type: str = "solo"
     group_size: int = 1
     budget_type: str = "total"
+    transport_mode: str = "flight"
     additional_notes: Optional[str] = None
 
 
