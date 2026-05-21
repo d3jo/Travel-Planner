@@ -66,7 +66,10 @@ def _default_trip_plan(raw_text: str) -> Dict[str, Any]:
         "itinerary": [],
         "budget_breakdown": {
             "hotels_total": 0, "activities_total": 0, "food_total": 0,
-            "transport_total": 0, "shopping_misc_total": 0,
+            "transport_total": 0,
+            "transport_range": {"min": 0, "max": 0},
+            "transport_breakdown": {"international": {"min": 0, "max": 0, "note": ""}, "local": 0},
+            "shopping_misc_total": 0,
             "grand_total": 0, "within_budget": True, "savings_tip": ""
         },
         "local_tips": [],
@@ -139,11 +142,8 @@ def _resolve_transport_mode(origin: str, destination: str, transport_mode: str) 
     return "flight", reason
 
 
-def generate_trip_plan(preferences: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Generate a full trip plan from user preferences.
-    Returns a structured dict with hotels, activities, itinerary, budget breakdown, and tips.
-    """
+def _build_trip_plan_prompt(preferences: Dict[str, Any]) -> tuple[str, str]:
+    """Build and return (instructions, user_input) for trip plan generation."""
     origin = preferences.get("origin", "")
     destination = preferences.get("destination", "")
     start_date = preferences.get("start_date", "")
@@ -157,7 +157,6 @@ def generate_trip_plan(preferences: Dict[str, Any]) -> Dict[str, Any]:
     budget_type = preferences.get("budget_type", "total")
     additional_notes = preferences.get("additional_notes", "")
     transport_mode = preferences.get("transport_mode", "flight")
-    transport_override_reason = None  # frontend already enforces feasibility via landmass check
 
     effective_total = budget * group_size if budget_type == "per_person" else budget
     per_person = budget if budget_type == "per_person" else (budget / max(group_size, 1))
@@ -241,7 +240,11 @@ def generate_trip_plan(preferences: Dict[str, Any]) -> Dict[str, Any]:
         "\"activities\":[{\"name\":str,\"category\":str,\"cost_per_person\":num,\"duration\":str,\"description\":str,\"best_time\":str,\"tags\":[str],\"booking_url\":str}],"
         "\"food_spots\":[{\"name\":str,\"cuisine\":str,\"avg_price\":str,\"neighborhood\":str,\"popular_dish\":str,\"why_popular\":str,\"review_summary\":str,\"booking_url\":str}],"
         "\"itinerary\":[{\"day\":num,\"date\":str,\"theme\":str,\"morning\":str,\"afternoon\":str,\"evening\":str,\"meals\":{\"breakfast\":str,\"lunch\":str,\"dinner\":str},\"estimated_daily_cost\":num}],"
-        "\"budget_breakdown\":{\"hotels_total\":num,\"activities_total\":num,\"food_total\":num,\"transport_total\":num,\"shopping_misc_total\":num,\"grand_total\":num,\"within_budget\":bool,\"savings_tip\":str},"
+        "\"budget_breakdown\":{\"hotels_total\":num,\"activities_total\":num,\"food_total\":num,"
+        "\"transport_total\":num,"
+        "\"transport_range\":{\"min\":num,\"max\":num},"
+        "\"transport_breakdown\":{\"international\":{\"min\":num,\"max\":num,\"note\":str},\"local\":num},"
+        "\"shopping_misc_total\":num,\"grand_total\":num,\"within_budget\":bool,\"savings_tip\":str},"
         "\"transportation_options\":[{\"type\":str,\"cabin\":str,\"durationEstimate\":str,\"why\":str,\"priceEstimate\":{\"min\":num,\"max\":num,\"currency\":str,\"confidence\":str,\"source\":\"llm_fallback\"},\"notes\":[str]}],"
         "\"local_tips\":[str],\"recommended_places\":[{\"name\":str,\"category\":str,\"why\":str,\"neighborhood\":str}],"
         "\"must_try_foods\":[{\"type\":str,\"dish\":str}],\"weather_note\":str,\"currency_note\":str}\n"
@@ -252,14 +255,30 @@ def generate_trip_plan(preferences: Dict[str, Any]) -> Dict[str, Any]:
         "weather_note: 2 sentences, temp °C/°F, what to pack.\n"
         f"Budget: priorities={priority_allocation}. Target allocation={target_alloc}. "
         "Apply each % to EFFECTIVE TOTAL. grand_total = sum of five categories. shopping_misc = Uber,metro,snacks,coffee,tips,souvenirs.\n"
-        f"transport_total = round-trip {transport_mode} + local city transport. "
-        "flight=airfare; car_rental=rental+gas; own_car=gas+tolls+parking; bus_train=ticket.\n"
-        "FLIGHT PRICING (strict minimums, round-trip economy): "
-        "CA/US↔Asia 1300-2500; CA/US↔Europe 900-1800; CA/US↔Africa/ME 1400-2800; CA/US↔S.America 800-1600; intra-continent 200-600. "
-        "Cabin multipliers on economy: Premium Economy 1.6-2.5×; Business 3-6×; First 6-12×. "
-        f"CABIN: {cabin_rule} Always provide 2-3 options from recommended down to economy. "
-        "notes must include 'Round-trip estimate' and 'Prices vary by airline and booking date'. "
-        "priceEstimate.source='llm_fallback'. confidence=low|medium|high."
+        "TRANSPORT BUDGET RULES:\n"
+        f"- transport_breakdown.local = local transport AT the destination for all {group_size} traveler(s) over {nights} nights "
+        "(metro, bus, Uber/taxi within the city). ~10-25/person/day. For car modes, include parking fees here.\n"
+        f"- transport_mode is '{transport_mode}'. Apply the matching rule below:\n"
+        "  FLIGHT: international.min = cheapest viable connecting/budget-carrier round-trip per person x group_size. "
+        "international.max = direct peak-season economy x group_size. "
+        "Connecting flights are typically 25-45% cheaper than direct; note this in international.note. "
+        "Flight pricing per person round-trip: CA/US<->Asia 950-2500; CA/US<->Europe 700-1800; "
+        "CA/US<->Africa/ME 1100-2800; CA/US<->S.America 600-1600; intra-continent 150-600.\n"
+        "  OWN_CAR: User drives their own car — NO rental fee. international.min/max = estimated round-trip fuel cost only "
+        f"(origin to destination and back, {group_size} traveler(s) sharing one car). "
+        "Estimate driving distance realistically. Fuel: ~0.14-0.18 CAD/km. Add tolls if applicable. "
+        "Set min=low fuel estimate, max=high fuel estimate (traffic/detours/tolls). "
+        "international.note = 'Estimated X km round-trip; fuel and tolls only — no rental fee.'\n"
+        f"  CAR_RENTAL: international.min = economy rental (~45-65 CAD/day) x {nights} nights + low fuel estimate. "
+        f"international.max = mid-size/SUV rental (~80-120 CAD/day) x {nights} nights + high fuel estimate. "
+        "international.note = 'Approx X CAD/day rental + fuel. Book in advance for best rates.'\n"
+        "  BUS_TRAIN: international.min/max = round-trip ticket price (low variability, set min~=max). "
+        "international.note = 'Round-trip ticket estimate.'\n"
+        "- transport_range.min = international.min + local. transport_range.max = international.max + local.\n"
+        "- transport_total = midpoint: round((international.min + international.max) / 2) + local. Use for grand_total.\n"
+        f"CABIN (flights only): {cabin_rule} Provide 2-3 options from recommended down to economy. "
+        "priceEstimate.source='llm_fallback'. confidence=low|medium|high. "
+        "notes must include 'Round-trip estimate' and 'Prices vary by airline and booking date'."
     )
 
     user_input = (
@@ -277,17 +296,43 @@ def generate_trip_plan(preferences: Dict[str, Any]) -> Dict[str, Any]:
         "Generate a complete trip plan as JSON. Use EFFECTIVE TOTAL BUDGET for all budget_breakdown totals."
     )
 
-    raw = _responses_text(instructions=instructions, user_input=user_input, max_output_tokens=3500)
-    print("=== LLM RAW (first 200) ===", raw[:200])
-    result = _parse_trip_plan_payload(raw)
-    print("=== PARSED KEYS ===", {k: (len(v) if isinstance(v, list) else type(v).__name__) for k, v in result.items() if k not in ("_raw",)})
-    if result.get("_parse_error"):
-        print("=== PARSE FAILED — raw tail ===", raw[-300:])
-    if transport_override_reason:
-        result["_transport_override"] = transport_override_reason
-    return result
+    return instructions, user_input
 
 
+def iter_trip_plan_events(preferences: Dict[str, Any]):
+    """Streaming generator. Yields {"type":"delta","text":str} chunks, then {"type":"done","result":dict}."""
+    instructions, user_input = _build_trip_plan_prompt(preferences)
+    client = _get_client()
+
+    _MODELS_NO_TEMP = ("o1", "o3", "o4", "gpt-5")
+    supports_temp = not any(OPENAI_MODEL.startswith(m) for m in _MODELS_NO_TEMP)
+    kwargs: Dict[str, Any] = dict(
+        model=OPENAI_MODEL,
+        instructions=instructions,
+        input=user_input,
+        max_output_tokens=3500,
+    )
+    if supports_temp:
+        kwargs["temperature"] = 0.5
+
+    buffer = ""
+    with client.responses.stream(**kwargs) as stream:
+        for event in stream:
+            if getattr(event, "type", None) == "response.output_text.delta":
+                delta = getattr(event, "delta", "") or ""
+                if delta:
+                    buffer += delta
+                    yield {"type": "delta", "text": delta}
+
+    result = _parse_trip_plan_payload(buffer)
+    yield {"type": "done", "result": result}
+
+
+def generate_trip_plan(preferences: Dict[str, Any]) -> Dict[str, Any]:
+    for event in iter_trip_plan_events(preferences):
+        if event["type"] == "done":
+            return event["result"]
+    return _default_trip_plan("")
 
 
 def generate_city_recommendations(country: str, limit: int = 5) -> Dict[str, Any]:

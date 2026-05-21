@@ -82,6 +82,10 @@ async function requestWithFallback(config) {
   throw lastError;
 }
 
+export function getBaseUrl() {
+  return preferredBaseUrl;
+}
+
 const api = {
   request: requestWithFallback,
   get: (url, config) => requestWithFallback({ ...config, method: "get", url }),

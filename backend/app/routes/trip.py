@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import asyncio
+import json
+import threading
 from datetime import date
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from app.services import llm
@@ -59,6 +63,53 @@ async def create_trip_plan(prefs: TripPreferences) -> Dict[str, Any]:
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to generate trip plan: {str(e)}")
 
+
+
+@router.post("/plan/stream")
+async def stream_trip_plan(prefs: TripPreferences) -> StreamingResponse:
+    if not prefs.origin.strip():
+        raise HTTPException(status_code=400, detail="Origin is required.")
+    if not prefs.destination.strip():
+        raise HTTPException(status_code=400, detail="Destination is required.")
+    if not prefs.start_date or not prefs.end_date:
+        raise HTTPException(status_code=400, detail="Travel dates are required.")
+    try:
+        start = date.fromisoformat(prefs.start_date)
+        end = date.fromisoformat(prefs.end_date)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Travel dates must use YYYY-MM-DD format.")
+    if end <= start:
+        raise HTTPException(status_code=400, detail="End date must be after start date.")
+    if prefs.budget <= 0:
+        raise HTTPException(status_code=400, detail="Budget must be greater than 0.")
+
+    loop = asyncio.get_event_loop()
+    queue: asyncio.Queue = asyncio.Queue()
+
+    def run():
+        try:
+            for event in llm.iter_trip_plan_events(prefs.model_dump()):
+                asyncio.run_coroutine_threadsafe(queue.put(event), loop)
+        except Exception as e:
+            asyncio.run_coroutine_threadsafe(
+                queue.put({"type": "error", "message": str(e)}), loop
+            )
+        asyncio.run_coroutine_threadsafe(queue.put(None), loop)
+
+    threading.Thread(target=run, daemon=True).start()
+
+    async def event_gen():
+        while True:
+            item = await queue.get()
+            if item is None:
+                break
+            yield f"data: {json.dumps(item)}\n\n"
+
+    return StreamingResponse(
+        event_gen(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.post("/recommend-cities")
