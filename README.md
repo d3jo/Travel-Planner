@@ -1,85 +1,135 @@
-# Trip Planner AI Agent
+# ✈️ Oversees — AI Travel Planner
 
-An AI-powered trip planner that generates personalized itineraries, hotel picks, activities, and budget breakdowns based on your preferences.
+An AI-powered travel planner that generates personalized itineraries, hotel picks, activities, food recommendations, and full budget breakdowns based on your preferences.
 
-## Structure
+🌐 **Live App:** [overseesai.vercel.app](https://overseesai.vercel.app/)
 
-```
-trip-planner-ai-agent/
-├── backend/        FastAPI + OpenAI (no database, no auth)
-└── frontend/       React + Vite web app
-```
+---
 
-## Setup
+## Features
 
-> Tip: Use repository-relative paths (`cd backend`, `cd frontend`) from the project root instead of absolute workspace paths, since local folder prefixes can vary (`/workspace` vs `/workspaces`).
+- **Interactive world map** — click any country to get AI city recommendations, or search your destination directly
+- **Smart budget planning** — set total or per-person budget with spending priorities; real transport pricing (flights, car rental, own car, bus/train)
+- **Full trip plan** — hotels, experiences, food spots, day-by-day itinerary, and budget breakdown
+- **Live generation** — streaming AI output with animated progress overlay
+- **User accounts** — register/login, save trips, and revisit them anytime
+- **Dark & light mode**
 
-### 1. Backend
+---
+
+## How to Use
+
+### 1. Plan a Trip
+
+1. Open the app at [overseesai.vercel.app](https://overseesai.vercel.app/)
+2. **Step 1 — Basics:**
+   - Search or click your destination on the map
+   - Set your origin city, travel dates, budget, currency, and transport mode
+   - Choose trip type (Solo, Couple, Friends, Family) and group size
+3. **Step 2 — Vibe:**
+   - Pick budget priorities (Hotels, Food, Activities, etc.)
+   - Select activity preferences (Outdoor, Cultural, Nightlife, etc.)
+   - Add any specific notes (dietary needs, must-see places, etc.)
+4. Hit **Generate Trip** — the AI streams your full plan in real time
+
+### 2. Browse Your Plan
+
+Use the tabs to explore every section:
+
+| Tab | What's inside |
+|-----|--------------|
+| **Overview** | Recommended places, local tips, weather, currency info |
+| **Hotels** | 4 hotel picks with prices, stars, and map links |
+| **Experiences** | 6 curated activities with costs and durations |
+| **Food** | 6 restaurant picks with must-order dishes |
+| **Transportation** | Flight/driving/transit options with price ranges |
+| **Itinerary** | Day-by-day schedule with morning/afternoon/evening breakdown |
+| **Budget** | Full cost breakdown with per-person and group totals |
+
+### 3. Save & Revisit
+
+- **Sign up** or **log in** from the top-right corner
+- Click **Save Trip** on any generated plan
+- Access all saved trips from **My Trips** (avatar icon → My Trips)
+
+---
+
+## Run Locally
+
+### Prerequisites
+
+- Python 3.10+
+- Node.js 18+
+- An [OpenAI API key](https://platform.openai.com/api-keys)
+
+### One-command start
 
 ```bash
-cd backend
-
-# Create virtual environment
-python -m venv .venv
-
-# Activate (Windows)
-.venv\Scripts\activate
-# Activate (Mac/Linux)
-source .venv/bin/activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-
-# Add your OpenAI API key to .env
-# Edit backend/.env and replace: OPENAI_API_KEY=your_openai_api_key_here
-
-# Optional CORS overrides
-# CORS_ALLOW_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
-# CORS_ALLOW_ORIGIN_REGEX=^https?://.+$
-
-# Start the server
-uvicorn app.main:app --reload
-# Runs on http://localhost:8000
+git clone https://github.com/d3jo/Travel-Planner.git
+cd Travel-Planner
+./start.sh
 ```
 
-### 2. Frontend
+On first run, the script will prompt for your OpenAI API key. Then visit:
 
-```bash
-cd frontend
+- **Frontend** → http://localhost:5173
+- **Backend** → http://localhost:8000
 
-# Install dependencies (skip if node_modules already exists)
-# .npmrc enables legacy peer dependency resolution for current map libs
-npm install
+Press `Ctrl+C` to stop both servers.
 
-# Optional: point frontend to a custom backend URL
-# Create frontend/.env.local with: VITE_API_BASE_URL=http://127.0.0.1:8000
+> You can also pass the key as an environment variable to skip the prompt:
+> ```bash
+> OPENAI_API_KEY=sk-... ./start.sh
+> ```
 
-# Start dev server
-npm run dev
-# Runs on http://localhost:5173
+### What `start.sh` does
 
-# Optional: serve production build locally
-# npm run build && npm run preview
+1. Creates `backend/.env` with your API key (once)
+2. Creates the Python virtual environment if missing
+3. Installs backend (`pip`) and frontend (`npm`) dependencies
+4. Starts both servers concurrently
+
+---
+
+## Project Structure
+
+```
+Travel-Planner/
+├── backend/                  FastAPI + OpenAI
+│   ├── app/
+│   │   ├── main.py           App entry point + CORS
+│   │   ├── database.py       SQLite setup (SQLAlchemy)
+│   │   ├── models.py         User & Trip models
+│   │   ├── routes/
+│   │   │   ├── auth.py       Register / Login (JWT)
+│   │   │   ├── saved_trips.py  Save / list / delete trips
+│   │   │   └── trip.py       AI trip generation (streaming)
+│   │   └── services/
+│   │       └── llm.py        OpenAI prompt + response parsing
+│   └── requirements.txt
+├── frontend/                 React + Vite
+│   └── src/
+│       ├── pages/
+│       │   ├── Wizard.jsx    2-step trip planning form
+│       │   ├── TripPlan.jsx  Tabbed trip results view
+│       │   ├── Auth.jsx      Login / Register page
+│       │   └── MyTrips.jsx   Saved trips list
+│       ├── contexts/
+│       │   ├── AuthContext.jsx  JWT + remember-me storage
+│       │   └── ThemeContext.jsx Dark / light mode
+│       └── api.js            Axios wrapper with auth headers
+└── start.sh                  One-command launcher
 ```
 
-Open [http://localhost:5173](http://localhost:5173) in your browser.
-
-## How It Works
-
-1. **Step 1 — Destination & Dates**: Enter where you're going and pick a date range using the calendar picker.
-2. **Step 2 — Budget**: Set your total budget, currency, and tag what you spend most on (Hotels, Activities, Food, etc.).
-3. **Step 3 — Activities**: Choose your activity style (Outdoor, Cultural, Nightlife…), trip type, and group size.
-4. **Step 4 — Notes**: Any extra details — dietary needs, specific places, must-sees.
-5. **Generate** — The AI creates a full trip plan with:
-   - Overview & local tips
-   - 3 hotel recommendations with prices
-   - 8–10 curated activities
-   - Day-by-day itinerary
-   - Animated budget breakdown
+---
 
 ## Tech Stack
 
-- **Frontend**: React 19, Vite, framer-motion, react-day-picker, react-router-dom
-- **Backend**: FastAPI, OpenAI API (gpt-4o-mini by default)
-- **No database, no authentication**
+| Layer | Technology |
+|-------|-----------|
+| Frontend | React 19, Vite, Framer Motion, react-simple-maps |
+| Backend | FastAPI, Python 3.11 |
+| AI | OpenAI API (gpt-4o-mini) |
+| Auth | JWT (python-jose), bcrypt |
+| Database | SQLite via SQLAlchemy |
+| Styling | CSS variables, dark/light theme |
