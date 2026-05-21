@@ -4,7 +4,7 @@ import { DayPicker } from "react-day-picker";
 import { AnimatePresence, motion, Reorder } from "framer-motion";
 import { ComposableMap, Geographies, Geography, ZoomableGroup, Marker as MapMarker } from "react-simple-maps";
 import "react-day-picker/dist/style.css";
-import api from "../api";
+import api, { getBaseUrl } from "../api";
 import { useIsDarkMode, useTheme } from "../contexts/ThemeContext";
 import ThemeToggle from "../components/ThemeToggle";
 
@@ -123,7 +123,7 @@ function LocationInput({ value, onChange, placeholder, inputStyle: style, isDark
     search(val);
   };
 
-  const listBg     = isDarkMode ? "rgba(12,12,20,0.97)" : "rgba(255,249,240,0.98)";
+  const listBg     = isDarkMode ? "rgba(36,36,36,0.97)" : "rgba(255,249,240,0.98)";
   const listBorder = isDarkMode ? "1px solid rgba(255,255,255,0.12)" : "1px solid rgba(168,207,223,0.3)";
   const hoverBg    = isDarkMode ? "rgba(13,148,136,0.18)" : "rgba(168,207,223,0.2)";
   const textColor  = isDarkMode ? "rgba(255,255,255,0.88)" : "rgba(51,68,85,0.9)";
@@ -241,7 +241,7 @@ function MapSearchBar({ onSelect, isDarkMode = true }) {
             exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.15 }}
             style={{
               ...mapStyles.suggestionList,
-              background: isDarkMode ? "rgba(12,12,20,0.96)" : "rgba(255,249,240,0.98)",
+              background: isDarkMode ? "rgba(36,36,36,0.97)" : "rgba(255,249,240,0.98)",
               border: isDarkMode ? "1px solid rgba(255,255,255,0.12)" : "1px solid rgba(168,207,223,0.3)",
             }}
           >
@@ -331,8 +331,8 @@ const GEO_URL = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json"
 // ─── Map Phase ────────────────────────────────────────────────────────────────
 function MapPhase({ onConfirm }) {
   const isDarkMode = useIsDarkMode();
-  const mapBg = isDarkMode ? "#0f111a" : "#b8dce8";
-  const cityPingColor = isDarkMode ? "#38bdf8" : "#0d6b8a";
+  const mapBg = isDarkMode ? "#1c1c1c" : "#b8dce8";
+  const cityPingColor = isDarkMode ? "#0d9488" : "#0d6b8a";
 
   const [selected, setSelected] = useState(null);
   const [position, setPosition] = useState({ coordinates: [0, 20], zoom: 1.8 });
@@ -427,20 +427,30 @@ function MapPhase({ onConfirm }) {
   const handleZoom = (delta) =>
     setPosition((prev) => constrain({ ...prev, zoom: prev.zoom + delta }));
 
+  const mapRef = useRef(null);
+  useEffect(() => {
+    const el = mapRef.current;
+    if (!el) return;
+    const handler = (e) => { if (e.ctrlKey) e.preventDefault(); };
+    el.addEventListener("wheel", handler, { passive: false });
+    return () => el.removeEventListener("wheel", handler);
+  }, []);
+
   return (
-    <div style={{ ...mapStyles.wrap, background: mapBg }}>
+    <div ref={mapRef} style={{ ...mapStyles.wrap, background: mapBg }}>
       <ComposableMap projection="geoMercator" projectionConfig={{ scale: 145 }}
         style={{ width: "100%", height: "100%", background: mapBg }}
       >
         <ZoomableGroup center={position.coordinates} zoom={position.zoom}
           onMoveEnd={(pos) => setPosition(constrain(pos))} minZoom={1.8} maxZoom={12}
+          filterZoomEvent={(e) => !e.button}
         >
           <Geographies geography={GEO_URL}>
             {({ geographies }) => geographies.map((geo) => (
               <Geography key={geo.rsmKey} geography={geo} onClick={() => handleCountryClick(geo)}
                 style={{
                   default: isDarkMode
-                    ? { fill: "#2a2f45", stroke: "#3e4a6e", strokeWidth: 0.4, outline: "none" }
+                    ? { fill: "#2e2e2e", stroke: "rgba(255,255,255,0.1)", strokeWidth: 0.4, outline: "none" }
                     : { fill: "#dff0f5", stroke: "#a8cdd8", strokeWidth: 0.4, outline: "none" },
                   hover:   { fill: "rgba(13,148,136,0.65)", stroke: "#0d9488", strokeWidth: 0.6, outline: "none", cursor: "pointer" },
                   pressed: { fill: "#0d9488", outline: "none" },
@@ -494,7 +504,7 @@ function MapPhase({ onConfirm }) {
           transition={{ duration: 0.6, delay: 0.1 }}
           style={{
             ...mapStyles.titleCard,
-            background: isDarkMode ? "rgba(10,10,18,0.82)" : "rgba(255,249,240,0.95)",
+            background: isDarkMode ? "rgba(36,36,36,0.88)" : "rgba(255,249,240,0.95)",
             border: isDarkMode ? "1px solid rgba(255,255,255,0.12)" : "1px solid rgba(168,207,223,0.3)",
             boxShadow: isDarkMode ? "0 8px 40px rgba(0,0,0,0.5)" : "0 4px 16px rgba(168,207,223,0.15)",
           }}
@@ -677,7 +687,7 @@ function StepDots({ step }) {
 }
 
 // ─── StepBox — unified shell for all 3 steps ─────────────────────────────────
-function StepBox({ children, onBack, backLabel = "← Back", onNext, onSubmit, loading, err, isLast }) {
+function StepBox({ children, onBack, backLabel = "← Back", onNext, onSubmit, loading, err, isLast, streamChars = 0 }) {
   const isDarkMode = useIsDarkMode();
   const borderColor = isDarkMode ? "rgba(255,255,255,0.12)" : "rgba(168,207,223,0.35)";
   const isGenerating = loading && isLast;
@@ -696,7 +706,7 @@ function StepBox({ children, onBack, backLabel = "← Back", onNext, onSubmit, l
     }}>
       {/* Content area — replaced by robot overlay when generating */}
       <div style={{ flex: 1, overflowY: isGenerating ? "hidden" : "auto", padding: "18px 22px 8px" }}>
-        {isGenerating ? <GeneratingOverlay /> : children}
+        {isGenerating ? <GeneratingOverlay chars={streamChars} /> : children}
       </div>
 
       {/* Error */}
@@ -782,6 +792,7 @@ export default function Wizard() {
   const [notes, setNotes]         = useState("");
   const [loading, setLoading]     = useState(false);
   const [err, setErr]             = useState("");
+  const [streamChars, setStreamChars] = useState(0);
 
   const toggleTag = (list, setList, id) =>
     setList((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
@@ -809,31 +820,51 @@ export default function Wizard() {
   };
 
 const handleSubmit = async () => {
-  setErr(""); setLoading(true);
+  setErr(""); setStreamChars(0); setLoading(true);
+  const payload = {
+    origin: origin.trim(),
+    destination: destination.trim(),
+    start_date: toYYYYMMDD(dateRange.from),
+    end_date: toYYYYMMDD(dateRange.to),
+    budget: Number(budget), currency, budget_type: budgetType,
+    budget_priorities: budgetPriorities,
+    activity_preferences: activityPrefs,
+    trip_type: tripType, group_size: Number(groupSize),
+    transport_mode: transportMode,
+    additional_notes: notes.trim() || null,
+  };
   try {
-    const payload = {
-      origin: origin.trim(),
-      destination: destination.trim(),
-      start_date: toYYYYMMDD(dateRange.from),
-      end_date: toYYYYMMDD(dateRange.to),
-      budget: Number(budget), currency, budget_type: budgetType,
-      budget_priorities: budgetPriorities,
-      activity_preferences: activityPrefs,
-      trip_type: tripType, group_size: Number(groupSize),
-      transport_mode: transportMode,
-      additional_notes: notes.trim() || null,
-    };
-    const res = await api.post("/plan", payload);
-    nav("/plan", { state: { plan: res.data, preferences: payload } });
-  } catch (e) {
-    const detail = e?.response?.data?.detail;
-    if (detail) {
-      setErr(detail);
-    } else if (e?.code === "ERR_NETWORK") {
-      setErr("Cannot reach the API server. Make sure backend is running and VITE_API_BASE_URL points to it.");
-    } else {
-      setErr(e?.message || "Failed to generate trip plan.");
+    const res = await fetch(`${getBaseUrl()}/plan/stream`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.detail || `Server error ${res.status}`);
     }
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let lineBuffer = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      lineBuffer += decoder.decode(value, { stream: true });
+      const lines = lineBuffer.split("\n");
+      lineBuffer = lines.pop();
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue;
+        const event = JSON.parse(line.slice(6));
+        if (event.type === "error") throw new Error(event.message);
+        if (event.type === "delta") setStreamChars((n) => n + event.text.length);
+        if (event.type === "done") {
+          nav("/plan", { state: { plan: event.result, preferences: payload } });
+          return;
+        }
+      }
+    }
+  } catch (e) {
+    setErr(e?.message || "Failed to generate trip plan.");
   } finally { setLoading(false); }
 };
 
@@ -898,7 +929,7 @@ const handleSubmit = async () => {
                 </StepBox>
               )}
               {step === 1 && (
-                <StepBox onBack={handleBack} onSubmit={handleSubmit} loading={loading} err={err} isLast>
+                <StepBox onBack={handleBack} onSubmit={handleSubmit} loading={loading} err={err} isLast streamChars={streamChars}>
                   <StepPreferencesAndDetails
                     budgetPriorities={budgetPriorities}
                     setBudgetPriorities={setBudgetPriorities}
@@ -1065,8 +1096,8 @@ function StepDatesAndBudget({
 
       <div style={styles.stepLabel}>Step 1 of 2</div>
 
-      {/* Two-column layout: left = all inputs, right = calendar */}
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)", gap: 16, alignItems: "stretch" }}>
+      {/* Three-column layout */}
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,0.8fr) minmax(0,1.2fr)", gap: 16, alignItems: "start" }}>
 
         {/* ── LEFT COLUMN: origin + transport + budget ── */}
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -1137,6 +1168,11 @@ function StepDatesAndBudget({
             )}
           </div>
 
+        </div>
+
+        {/* ── MIDDLE COLUMN: budget + trip type + travelers ── */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+
           {/* Budget */}
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             <div style={styles.stepTitle}>Budget</div>
@@ -1187,15 +1223,23 @@ function StepDatesAndBudget({
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <div style={styles.stepTitle}>Number of travelers</div>
             <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-              <button type="button" style={styles.counterBtn} onClick={() => setGroupSize((v) => Math.max(1, v - 1))}>−</button>
+              <button type="button" style={styles.counterBtn} onClick={() => {
+                const next = Math.max(1, groupSize - 1);
+                setGroupSize(next);
+                if (next === 1) setTripType("solo");
+              }}>−</button>
               <span style={{ fontSize: "1.5rem", fontFamily: '"Pixelify Sans", sans-serif', minWidth: 28, textAlign: "center" }}>{groupSize}</span>
-              <button type="button" style={styles.counterBtn} onClick={() => setGroupSize((v) => Math.min(20, v + 1))}>+</button>
+              <button type="button" style={styles.counterBtn} onClick={() => {
+                const next = Math.min(20, groupSize + 1);
+                setGroupSize(next);
+                if (next === 2 && tripType === "solo") setTripType("friends");
+              }}>+</button>
               <span style={{ color: "var(--text-muted)", fontSize: "0.9rem" }}>{groupSize === 1 ? "traveler" : "travelers"}</span>
             </div>
           </div>
         </div>
 
-        {/* ── RIGHT COLUMN: calendar only ── */}
+        {/* ── RIGHT COLUMN: calendar ── */}
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           <div style={styles.stepTitle}>When are you traveling?</div>
           {dateRange?.from && (
@@ -1205,7 +1249,7 @@ function StepDatesAndBudget({
           )}
           <div className="calendar-picker" style={{
             ...styles.calCard, background: inputBg, border: panelBorder,
-            padding: "8px 10px", flex: 1,
+            padding: "8px 10px",
           }}>
             <DayPicker mode="range" selected={dateRange} onSelect={handleDateSelect}
               month={calMonth} onMonthChange={setCalMonth}
@@ -1233,7 +1277,7 @@ function StepPreferencesAndDetails({
       {/* Two-column layout */}
       <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)", gap: 20, alignItems: "start" }}>
 
-        {/* ── LEFT: priorities + vibe ── */}
+        {/* ── LEFT: priorities ── */}
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           <div>
             <div style={styles.stepTitle}>Rank your investment priorities</div>
@@ -1272,8 +1316,10 @@ function StepPreferencesAndDetails({
               );
             })}
           </Reorder.Group>
+        </div>
 
-          <div style={styles.divider} />
+        {/* ── RIGHT: vibe + notes ── */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           <div>
             <div style={styles.stepTitle}>Choose your trip vibe</div>
             <div style={styles.stepHint}>Pick the styles you want the itinerary to focus on.</div>
@@ -1283,10 +1329,7 @@ function StepPreferencesAndDetails({
               <Tag key={t.id} label={t.label} selected={activityPrefs.includes(t.id)} onClick={() => toggleActivity(t.id)} />
             ))}
           </div>
-        </div>
 
-        {/* ── RIGHT: notes + ready box ── */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           <div>
             <div style={styles.stepTitle}>Anything specific you want to do?</div>
             <div style={styles.stepHint}>Restaurants, landmarks, dietary needs, accessibility…</div>
@@ -1296,13 +1339,6 @@ function StepPreferencesAndDetails({
             value={notes} onChange={(e) => setNotes(e.target.value)}
             style={styles.textarea} rows={4}
           />
-
-          <div style={styles.readyBox}>
-            <div style={styles.readyTitle}>You're all set! 🎉</div>
-            <div style={styles.readyText}>
-              Hit Generate below — our AI will craft hotels, experiences, a day-by-day itinerary, and budget breakdown just for you.
-            </div>
-          </div>
         </div>
       </div>
     </div>
@@ -1371,7 +1407,7 @@ function CityLoadingOverlay() {
   );
 }
 
-function GeneratingOverlay() {
+function GeneratingOverlay({ chars = 0 }) {
   const msgs = [
     "Researching the best hotels for you...",
     "Mapping out your day-by-day itinerary...",
@@ -1387,59 +1423,137 @@ function GeneratingOverlay() {
     return () => clearInterval(t);
   }, []);
 
+  const pct = Math.min(98, Math.round((chars / 8000) * 100));
+
+  const STEPS = [
+    { icon: "🏨", label: "Hotels" },
+    { icon: "🎭", label: "Activities" },
+    { icon: "🍽️", label: "Food" },
+    { icon: "📅", label: "Itinerary" },
+    { icon: "💰", label: "Budget" },
+  ];
+  const activeStep = Math.min(STEPS.length - 1, Math.floor((pct / 98) * STEPS.length));
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "36px 20px 28px", gap: 20 }}>
-      {/* Robot + spinning gears */}
-      <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
-        <motion.span
-          animate={{ rotate: 360 }}
-          transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
-          style={{ fontSize: "2rem", display: "inline-block", opacity: 0.7 }}
-        >⚙️</motion.span>
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "28px 20px 24px", gap: 18 }}>
 
+      {/* Orbiting dots behind robot */}
+      <div style={{ position: "relative", width: 120, height: 120, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        {[0, 1, 2, 3].map((i) => (
+          <motion.div
+            key={i}
+            animate={{ rotate: 360 }}
+            transition={{ duration: 3 + i * 0.8, repeat: Infinity, ease: "linear", delay: i * 0.4 }}
+            style={{ position: "absolute", inset: 0, display: "flex", alignItems: "flex-start", justifyContent: "center" }}
+          >
+            <motion.div
+              animate={{ scale: [0.7, 1.2, 0.7], opacity: [0.4, 1, 0.4] }}
+              transition={{ duration: 1.5, repeat: Infinity, delay: i * 0.3 }}
+              style={{
+                width: 8, height: 8, borderRadius: "50%",
+                background: i % 2 === 0 ? "var(--cal-accent)" : "rgba(255,255,255,0.4)",
+                marginTop: i * 6,
+              }}
+            />
+          </motion.div>
+        ))}
+
+        {/* Pulsing ring */}
         <motion.div
-          animate={{ y: [0, -14, 0], rotate: [0, -4, 4, 0] }}
+          animate={{ scale: [1, 1.18, 1], opacity: [0.15, 0.35, 0.15] }}
           transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-          style={{ fontSize: "5rem", lineHeight: 1, filter: "drop-shadow(0 0 18px rgba(13,148,136,0.55))" }}
-        >🤖</motion.div>
+          style={{
+            position: "absolute", inset: 10, borderRadius: "50%",
+            border: "2px solid var(--cal-accent)",
+          }}
+        />
 
-        <motion.span
-          animate={{ rotate: -360 }}
-          transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
-          style={{ fontSize: "2rem", display: "inline-block", opacity: 0.7 }}
-        >⚙️</motion.span>
+        {/* Robot */}
+        <motion.div
+          animate={{ y: [0, -8, 0], rotate: [0, -3, 3, 0] }}
+          transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
+          style={{ fontSize: "4rem", lineHeight: 1, filter: "drop-shadow(0 0 16px rgba(13,148,136,0.6))", zIndex: 1 }}
+        >🤖</motion.div>
       </div>
 
       {/* Rotating message */}
-      <div style={{ height: 28, display: "flex", alignItems: "center", overflow: "hidden" }}>
+      <div style={{ height: 24, display: "flex", alignItems: "center", overflow: "hidden" }}>
         <AnimatePresence mode="wait">
           <motion.div
             key={msgIdx}
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
-            transition={{ duration: 0.35 }}
-            style={{ fontSize: "0.92rem", color: "var(--white)", fontWeight: 600, textAlign: "center", whiteSpace: "nowrap" }}
+            transition={{ duration: 0.3 }}
+            style={{ fontSize: "0.88rem", color: "var(--white)", fontWeight: 600, textAlign: "center", whiteSpace: "nowrap" }}
           >
             {msgs[msgIdx]}
           </motion.div>
         </AnimatePresence>
       </div>
 
-      {/* Animated bar segments */}
-      <div style={{ display: "flex", gap: 5 }}>
-        {[0, 1, 2, 3, 4, 5].map((i) => (
-          <motion.div
-            key={i}
-            animate={{ scaleY: [0.4, 1.4, 0.4], opacity: [0.35, 1, 0.35] }}
-            transition={{ duration: 1, repeat: Infinity, delay: i * 0.15, ease: "easeInOut" }}
-            style={{ width: 6, height: 22, borderRadius: 3, background: "var(--cal-accent)", transformOrigin: "center" }}
-          />
-        ))}
+      {/* Step indicators */}
+      <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+        {STEPS.map((s, i) => {
+          const done = i < activeStep;
+          const active = i === activeStep;
+          return (
+            <motion.div
+              key={s.label}
+              animate={active ? { scale: [1, 1.15, 1] } : {}}
+              transition={{ duration: 1, repeat: Infinity }}
+              style={{
+                display: "flex", flexDirection: "column", alignItems: "center", gap: 3,
+                opacity: done ? 1 : active ? 1 : 0.3,
+              }}
+            >
+              <div style={{
+                fontSize: "1.1rem",
+                filter: active ? "drop-shadow(0 0 6px rgba(13,148,136,0.8))" : "none",
+              }}>{s.icon}</div>
+              <div style={{
+                fontSize: "0.6rem", fontWeight: 700,
+                color: done ? "var(--cal-accent)" : active ? "var(--white)" : "var(--text-muted)",
+                textTransform: "uppercase", letterSpacing: "0.04em",
+              }}>{done ? "✓" : s.label}</div>
+            </motion.div>
+          );
+        })}
       </div>
 
-      <div style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginTop: -4 }}>
-        This may take 1–2 minutes
+      {/* Progress bar with percentage */}
+      <div style={{ width: "100%", maxWidth: 260 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+          <div style={{ display: "flex", gap: 4 }}>
+            {[0, 1, 2, 3, 4, 5, 6].map((i) => (
+              <motion.div
+                key={i}
+                animate={{ scaleY: [0.4, 1.4, 0.4], opacity: [0.3, 1, 0.3] }}
+                transition={{ duration: 0.8, repeat: Infinity, delay: i * 0.1, ease: "easeInOut" }}
+                style={{ width: 3, height: 14, borderRadius: 2, background: "var(--cal-accent)", transformOrigin: "center" }}
+              />
+            ))}
+          </div>
+          <motion.span
+            key={pct}
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            style={{ fontSize: "0.82rem", color: "var(--cal-accent)", fontWeight: 800, fontFamily: '"Pixelify Sans", sans-serif' }}
+          >
+            {chars > 0 ? `${pct}%` : "—"}
+          </motion.span>
+        </div>
+        <div style={{ height: 5, borderRadius: 3, background: "rgba(255,255,255,0.08)", overflow: "hidden" }}>
+          <motion.div
+            animate={{ width: chars > 0 ? `${pct}%` : "0%" }}
+            transition={{ ease: "easeOut", duration: 0.4 }}
+            style={{
+              height: "100%", borderRadius: 3,
+              background: "linear-gradient(90deg, #0d9488, #0891b2)",
+              boxShadow: "0 0 8px rgba(13,148,136,0.6)",
+            }}
+          />
+        </div>
       </div>
     </div>
   );
@@ -1485,7 +1599,7 @@ const mapStyles = {
   },
   selectedChip: {
     display: "flex", alignItems: "center", gap: 8,
-    background: "rgba(10,10,18,0.85)", backdropFilter: "blur(16px)",
+    background: "rgba(36,36,36,0.9)", backdropFilter: "blur(16px)",
     border: "1px solid rgba(13,148,136,0.5)", borderRadius: 24, padding: "8px 16px",
     pointerEvents: "all", boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
   },
@@ -1530,11 +1644,11 @@ const mapStyles = {
 const styles = {
   wrap: {
   display: "flex", flexDirection: "column", alignItems: "center",
-  minHeight: "100vh",
+  height: "100vh",
   width: "100%",
-  padding: "20px 16px 80px",  // increased bottom padding from 16px to 80px
+  padding: "20px 16px 80px",
   boxSizing: "border-box",
-  overflow: "visible",
+  overflowY: "auto",
 },
 content: {
   display: "flex", flexDirection: "column", alignItems: "center",

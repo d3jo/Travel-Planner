@@ -610,14 +610,14 @@ function budgetMathNote(key, value, currency, nights, groupSize) {
     case "food":
       return `${currency} ${fmt(perPerson / n)} /person/day × ${g} traveler${g !== 1 ? "s" : ""} × ${n} days`;
     case "transport":
-      return `${currency} ${fmt(perPerson)} /person × ${g} traveler${g !== 1 ? "s" : ""}`;
+      return `${currency} ${fmt(perPerson)} /person (midpoint) × ${g} traveler${g !== 1 ? "s" : ""}`;
     case "shopping":
       return `${currency} ${fmt(perPerson / n)} /person/day × ${g} traveler${g !== 1 ? "s" : ""} × ${n} nights`;
     default: return null;
   }
 }
 
-function BudgetRow({ item, total, currency, nights, groupSize, perPersonMode }) {
+function BudgetRow({ item, total, currency, nights, groupSize, perPersonMode, transportMode }) {
   const [hovered, setHovered] = useState(false);
   const pct = Math.round((item.value / total) * 100);
   const perPersonVal = Math.round(item.value / groupSize);
@@ -625,6 +625,10 @@ function BudgetRow({ item, total, currency, nights, groupSize, perPersonMode }) 
   const secondaryVal = perPersonMode ? item.value : (groupSize > 1 ? perPersonVal : null);
   const secondaryLabel = perPersonMode ? `${currency} ${item.value.toLocaleString()} total` : `${currency} ${perPersonVal.toLocaleString()} /person`;
   const note = budgetMathNote(item.key, item.value, currency, nights, groupSize);
+
+  const hasRange = item.key === "transport" && item.range?.min != null && item.range?.max != null && item.range.min !== item.range.max;
+  const bd = item.breakdown;
+
   return (
     <div
       style={{ ...styles.budgetRow, position: "relative" }}
@@ -637,13 +641,26 @@ function BudgetRow({ item, total, currency, nights, groupSize, perPersonMode }) 
           {note && <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", opacity: 0.6 }}>ⓘ</span>}
         </span>
         <div style={{ textAlign: "right" }}>
-          <div style={{ color: "var(--text-muted)", fontSize: "0.88rem" }}>
-            {currency} {primaryVal.toLocaleString()}
-          </div>
-          {secondaryVal != null && (
-            <div style={{ color: "var(--text-muted)", fontSize: "0.75rem", opacity: 0.55 }}>
-              {secondaryLabel}
-            </div>
+          {hasRange ? (
+            <>
+              <div style={{ color: "var(--text-muted)", fontSize: "0.88rem" }}>
+                {currency} {Math.round(item.range.min).toLocaleString()} – {Math.round(item.range.max).toLocaleString()}
+              </div>
+              <div style={{ color: "var(--text-muted)", fontSize: "0.72rem", opacity: 0.55 }}>
+                est. midpoint {currency} {primaryVal.toLocaleString()}
+              </div>
+            </>
+          ) : (
+            <>
+              <div style={{ color: "var(--text-muted)", fontSize: "0.88rem" }}>
+                {currency} {primaryVal.toLocaleString()}
+              </div>
+              {secondaryVal != null && (
+                <div style={{ color: "var(--text-muted)", fontSize: "0.75rem", opacity: 0.55 }}>
+                  {secondaryLabel}
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -667,6 +684,36 @@ function BudgetRow({ item, total, currency, nights, groupSize, perPersonMode }) 
           pointerEvents: "none",
         }}>
           {note}
+        </div>
+      )}
+      {hasRange && bd && (
+        <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 4 }}>
+          {bd.international?.min != null && (
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.78rem", color: "var(--text-muted)" }}>
+              <span>
+                {transportMode === "own_car" ? "⛽ Fuel & tolls (round-trip)" :
+                 transportMode === "car_rental" ? "🚗 Rental + fuel" :
+                 transportMode === "bus_train" ? "🚌 Bus / Train (round-trip)" :
+                 "✈️ Flights (round-trip)"}
+              </span>
+              <span>{currency} {Math.round(bd.international.min).toLocaleString()} – {Math.round(bd.international.max).toLocaleString()}</span>
+            </div>
+          )}
+          {bd.local > 0 && (
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.78rem", color: "var(--text-muted)" }}>
+              <span>🚌 Local transport</span>
+              <span>{currency} {Math.round(bd.local).toLocaleString()}</span>
+            </div>
+          )}
+          {bd.international?.note && (
+            <div style={{
+              marginTop: 2, padding: "5px 9px", borderRadius: 6,
+              background: "rgba(59,130,246,0.08)", border: "1px solid rgba(59,130,246,0.2)",
+              fontSize: "0.74rem", color: "var(--text-muted)", lineHeight: 1.45,
+            }}>
+              💡 {bd.international.note}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -699,7 +746,8 @@ function TabBudget({ budget, prefs }) {
     { key: "hotels",   label: "🏨 Hotels",         value: budget.hotels_total,        color: "#0d9488" },
     { key: "activities", label: "🎭 Experiences & Attractions", value: budget.activities_total, color: "#8b5cf6" },
     { key: "food",     label: "🍽️ Food",            value: budget.food_total,          color: "#f59e0b" },
-    { key: "transport",label: "🚗 Transportation",   value: budget.transport_total,     color: "#3b82f6" },
+    { key: "transport",label: "🚗 Transportation",   value: budget.transport_total,     color: "#3b82f6",
+      range: budget.transport_range, breakdown: budget.transport_breakdown },
     { key: "shopping", label: "🛍️ Shopping, Miscellaneous & Incidentals", value: budget.shopping_misc_total, color: "#ec4899" },
   ].filter((i) => i.value > 0);
 
@@ -811,7 +859,7 @@ function TabBudget({ budget, prefs }) {
         </div>
 
         {items.map((item) => (
-          <BudgetRow key={item.key} item={item} total={total} currency={prefs?.currency} nights={nights} groupSize={groupSize} perPersonMode={perPersonMode} />
+          <BudgetRow key={item.key} item={item} total={total} currency={prefs?.currency} nights={nights} groupSize={groupSize} perPersonMode={perPersonMode} transportMode={prefs?.transport_mode} />
         ))}
 
         {budget.savings_tip && (
