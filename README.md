@@ -5,40 +5,36 @@ An AI-powered trip planner that generates personalized itineraries, hotel picks,
 ## Structure
 
 ```
-Travel-Planner/
+trip-planner-ai-agent/
 ├── backend/        FastAPI + OpenAI (no database, no auth)
 └── frontend/       React + Vite web app
 ```
 
 ## Setup
 
-### 1. Backend
+> Tip: Use repository-relative paths (`cd backend`, `cd frontend`) from the project root instead of absolute workspace paths, since local folder prefixes can vary (`/workspace` vs `/workspaces`).
 
-Requires **Python 3.11** (see `.python-version`).
+### 1. Backend
 
 ```bash
 cd backend
 
-# Create virtual environment (skip if .venv already exists)
+# Create virtual environment
 python -m venv .venv
 
-# Activate — PowerShell (Windows)
-.\.venv\Scripts\Activate.ps1
-# Activate — Command Prompt (Windows)
+# Activate (Windows)
 .venv\Scripts\activate
-# Activate — Git Bash (Windows)  ← use Scripts/, not bin/
-source .venv/Scripts/activate
-# Activate — Mac/Linux
+# Activate (Mac/Linux)
 source .venv/bin/activate
 
 # Install dependencies
 pip install -r requirements.txt
 
-# Create the .env file and add your OpenAI API key
-echo OPENAI_API_KEY=your_openai_api_key_here > .env
-# Then open .env and replace the placeholder with your actual key
 
-# Optional CORS overrides (add to .env if needed)
+# Add your OpenAI API key to .env
+# Edit backend/.env and replace: OPENAI_API_KEY=your_openai_api_key_here
+
+# Optional CORS overrides
 # CORS_ALLOW_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 # CORS_ALLOW_ORIGIN_REGEX=^https?://.+$
 
@@ -52,8 +48,8 @@ uvicorn app.main:app --reload
 ```bash
 cd frontend
 
-# Install dependencies — must be run from inside the frontend/ directory
-# (.npmrc enables legacy peer dependency resolution for current map libs)
+# Install dependencies (skip if node_modules already exists)
+# .npmrc enables legacy peer dependency resolution for current map libs
 npm install
 
 # Optional: point frontend to a custom backend URL

@@ -1,0 +1,269 @@
+html, body {
+  height: 100%;
+  overflow: hidden; /* keep this — outer shell stays fixed */
+}
+
+#root {
+  width: 100%;
+  height: 100%;
+  overflow: visible; /* allow pages to control their own scrolling */
+  position: relative;
+}
+
+/* ─── react-simple-maps overrides ────────────────────────────────────────── */
+.rsm-geography:focus { outline: none; }
+
+:root {
+  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  /* Dark mode (default) */
+  --bg-app:        #242424;
+  --white:         rgba(255, 255, 255, 0.87);
+  --bg-card:       rgba(255, 255, 255, 0.06);
+  --bg-card-solid: #2e2e2e;
+  --border-col:    rgba(255, 255, 255, 0.25);
+  --bg-btn:        #1a1a1a;
+  --text-btn:      #ffffff;
+  --bg-input:      transparent;
+  --text-muted:    rgba(255, 255, 255, 0.45);
+  /* Calendar accent (teal) */
+  --cal-accent:    #0d9488;
+  --cal-accent-bg: rgba(13, 148, 136, 0.18);
+  --cal-accent-fg: #5eead4;
+  --cal-accent-ring: rgba(13, 148, 136, 0.2);
+
+  color: var(--white);
+  background-color: var(--bg-app);
+}
+
+/* Light mode overrides */
+body.light {
+  --bg-app:        #E8F4F8;
+  --white:         #334455;
+  --bg-card:       rgba(255, 249, 240, 0.95);
+  --bg-card-solid: #FFF9F0;
+  --border-col:    rgba(168, 207, 223, 0.35);
+  --bg-btn:        #0d9488;
+  --text-btn:      #ffffff;
+  --bg-input:      rgba(168, 207, 223, 0.12);
+  --text-muted:    rgba(100, 120, 140, 0.75);
+  /* Calendar accent (same as map theme) */
+  --cal-accent:    #0d9488;
+  --cal-accent-bg: rgba(13, 148, 136, 0.14);
+  --cal-accent-fg: #0f766e;
+  --cal-accent-ring: rgba(13, 148, 136, 0.2);
+
+  color: var(--white);
+  background-color: var(--bg-app);
+}
+
+a {
+  font-weight: 500;
+  color: #646cff;
+  text-decoration: inherit;
+}
+a:hover {
+  color: #535bf2;
+}
+
+/* Hide scrollbars globally but keep them visible on textarea */
+* {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+*::-webkit-scrollbar {
+  display: none;
+}
+textarea {
+  scrollbar-width: thin;
+  -ms-overflow-style: auto;
+}
+textarea::-webkit-scrollbar {
+  display: block;
+  width: 6px;
+}
+textarea::-webkit-scrollbar-thumb {
+  background: #aaa;
+  border-radius: 4px;
+}
+textarea::-webkit-scrollbar-track {
+  background: #f0f0f0;
+}
+
+html, body {
+  margin: 0;
+  min-width: 320px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+#root {
+  margin: 0;
+  min-width: 320px;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+
+body {
+  display: flex;
+}
+
+/* Calendar (DayPicker) uses Pixelify Sans */
+.calendar-picker,
+.calendar-picker * {
+  font-family: "Pixelify Sans", sans-serif;
+}
+
+/* Make DayPicker fill its container */
+.calendar-picker .rdp-root {
+  --rdp-month-caption-font-size: 2.5rem;
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+}
+.calendar-picker .rdp-months {
+  width: 100% !important;
+}
+.calendar-picker .rdp-month {
+  width: 100% !important;
+}
+.calendar-picker .rdp-month_grid {
+  width: 100% !important;
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+.calendar-picker .rdp-weekday {
+  text-align: center;
+  padding: 6px 0;
+}
+.calendar-picker .rdp-day {
+  min-height: 58px;
+  text-align: center;
+  vertical-align: middle;
+}
+.calendar-picker .rdp-day_button {
+  width: 54px !important;
+  height: 54px !important;
+  min-height: unset !important;
+  padding: 0 !important;
+  box-sizing: border-box !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: auto;
+  border-radius: 50%;
+  cursor: grab;
+  transition: transform 0.12s ease, background-color 0.14s ease, box-shadow 0.14s ease;
+}
+.calendar-picker .rdp-day_button:hover {
+  transform: translateY(-1px);
+}
+.calendar-picker .rdp-day_button:active {
+  cursor: grabbing;
+  transform: scale(0.93);
+}
+
+/* Stronger contrast: dim days outside the current month more */
+.calendar-picker .rdp-root {
+  --rdp-outside-opacity: 0.28;
+  --rdp-accent-color: var(--cal-accent);
+  --rdp-accent-background-color: var(--cal-accent-ring);
+  --rdp-range_middle-background-color: rgba(13, 148, 136, 0.2);
+  --rdp-range_middle-color: var(--white);
+}
+
+body:not(.light) .calendar-picker .rdp-root {
+  --rdp-nav_button-color: var(--white);
+  --rdp-nav_button-disabled-opacity: 0.35;
+}
+
+body:not(.light) .calendar-picker .rdp-month_caption,
+body:not(.light) .calendar-picker .rdp-weekday {
+  color: var(--white);
+}
+
+body:not(.light) select {
+  color-scheme: dark;
+}
+
+body:not(.light) select option {
+  background-color: #1f2333;
+  color: #ffffff;
+}
+
+body.light select option {
+  background-color: #fff9f0;
+  color: #334455;
+}
+
+
+
+.calendar-picker .rdp-range_start .rdp-day_button,
+.calendar-picker .rdp-range_end .rdp-day_button {
+  box-shadow: 0 0 0 2px var(--cal-accent-ring);
+}
+.calendar-picker .rdp-range_middle .rdp-day_button {
+  animation: rdp-drag-glow 0.55s ease-in-out;
+}
+
+@keyframes rdp-drag-glow {
+  0% { transform: scale(0.92); }
+  60% { transform: scale(1.03); }
+  100% { transform: scale(1); }
+}
+
+/* Circle today's date */
+.calendar-picker .rdp-today .rdp-day_button {
+  border: 2px solid var(--cal-accent);
+  border-radius: 50%;
+  width: 54px;
+  height: 54px;
+  min-height: unset;
+  padding: 0 !important;
+  box-sizing: border-box !important;
+  background-color: var(--cal-accent-bg);
+  color: var(--cal-accent-fg);
+  font-weight: 700;
+  margin: auto;
+}
+.calendar-picker .rdp-outside {
+  opacity: var(--rdp-outside-opacity);
+  color: var(--text-muted);
+}
+
+h1 {
+  font-size: 3.2em;
+  line-height: 1.1;
+}
+
+button {
+  border-radius: 8px;
+  border: 1px solid transparent;
+  padding: 0.6em 1.2em;
+  font-size: 1em;
+  font-weight: 500;
+  font-family: inherit;
+  background-color: var(--bg-btn);
+  color: var(--text-btn);
+  cursor: pointer;
+  transition: border-color 0.25s, background-color 0.25s;
+}
+button:hover {
+  border-color: var(--border-col);
+}
+button:focus,
+button:focus-visible {
+  outline: 4px auto -webkit-focus-ring-color;
+}
+
+/* Removed prefers-color-scheme override — theme is controlled manually via body.light class */
