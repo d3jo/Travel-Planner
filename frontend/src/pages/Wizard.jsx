@@ -1578,6 +1578,17 @@ function GeneratingOverlay({ chars = 0 }) {
           >🤖</motion.div>
         </div>
 
+        {/* Percentage */}
+        <motion.div
+          key={pct}
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.3 }}
+          style={{ fontSize: "2.2rem", fontWeight: 800, fontFamily: '"Pixelify Sans", sans-serif', color: "var(--cal-accent)", lineHeight: 1, marginTop: -4 }}
+        >
+          {chars > 0 ? `${pct}%` : "—"}
+        </motion.div>
+
         {/* Rotating message */}
         <div style={{ height: 24, display: "flex", alignItems: "center", overflow: "hidden" }}>
           <AnimatePresence mode="wait">
@@ -1613,37 +1624,6 @@ function GeneratingOverlay({ chars = 0 }) {
               </motion.div>
             );
           })}
-        </div>
-
-        {/* Wave bars + percentage */}
-        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 10 }}>
-          <div style={{ display: "flex", gap: 4 }}>
-            {Array.from({ length: 20 }, (_, i) => (
-              <motion.div
-                key={i}
-                animate={{ scaleY: [0.4, 1.4, 0.4], opacity: [0.3, 1, 0.3] }}
-                transition={{ duration: 0.8, repeat: Infinity, delay: i * 0.05, ease: "easeInOut" }}
-                style={{ width: 3, height: 14, borderRadius: 2, background: "var(--cal-accent)", transformOrigin: "center" }}
-              />
-            ))}
-          </div>
-          <motion.span
-            key={pct}
-            initial={{ opacity: 0, y: -4 }}
-            animate={{ opacity: 1, y: 0 }}
-            style={{ fontSize: "0.82rem", color: "var(--cal-accent)", fontWeight: 800, fontFamily: '"Pixelify Sans", sans-serif' }}
-          >
-            {chars > 0 ? `${pct}%` : "—"}
-          </motion.span>
-        </div>
-
-        {/* Progress bar */}
-        <div style={{ width: 240, height: 5, borderRadius: 3, background: "rgba(255,255,255,0.08)", overflow: "hidden" }}>
-          <motion.div
-            animate={{ width: chars > 0 ? `${pct}%` : "0%" }}
-            transition={{ ease: "easeOut", duration: 0.4 }}
-            style={{ height: "100%", borderRadius: 3, background: "linear-gradient(90deg, #0d9488, #0891b2)", boxShadow: "0 0 8px rgba(13,148,136,0.6)" }}
-          />
         </div>
 
       </div>
