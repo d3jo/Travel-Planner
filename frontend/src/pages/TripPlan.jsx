@@ -539,13 +539,18 @@ function TabTransportation({ options, currency, origin, destination, overrideNot
             <div style={styles.activityHeader}>
               <div style={styles.activityName}>{modeIcon} {typeStr}</div>
               {priceDisplay && (
-                <span style={{
-                  fontSize: "0.85rem", fontWeight: 700, padding: "4px 12px", borderRadius: 999,
-                  background: "rgba(13,148,136,0.12)", border: "1px solid rgba(13,148,136,0.35)",
-                  color: "var(--cal-accent)", whiteSpace: "nowrap",
-                }}>
-                  Est. {priceDisplay}
-                </span>
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2 }}>
+                  <span style={{
+                    fontSize: "0.85rem", fontWeight: 700, padding: "4px 12px", borderRadius: 999,
+                    background: "rgba(13,148,136,0.12)", border: "1px solid rgba(13,148,136,0.35)",
+                    color: "var(--cal-accent)", whiteSpace: "nowrap",
+                  }}>
+                    Est. {priceDisplay}
+                  </span>
+                  <span style={{ fontSize: "0.7rem", color: "var(--text-muted)", paddingRight: 4 }}>
+                    per person
+                  </span>
+                </div>
               )}
             </div>
 
@@ -807,7 +812,7 @@ function budgetMathNote(key, value, currency, nights, groupSize) {
     case "food":
       return `${currency} ${fmt(perPerson / n)} /person/day × ${g} traveler${g !== 1 ? "s" : ""} × ${n} days`;
     case "transport":
-      return `${currency} ${fmt(perPerson)} /person incl. flights (group total ÷ ${g} traveler${g !== 1 ? "s" : ""})`;
+      return `${currency} ${fmt(perPerson)} /person (flights per person × ${g} traveler${g !== 1 ? "s" : ""} + local)`;
     case "shopping":
       return `${currency} ${fmt(perPerson / n)} /person/day × ${g} traveler${g !== 1 ? "s" : ""} × ${n} nights`;
     default: return null;
@@ -819,11 +824,11 @@ function BudgetRow({ item, total, currency, nights, groupSize, perPersonMode, tr
   const pct = Math.round((item.value / total) * 100);
   const perPersonVal = Math.round(item.value / groupSize);
   const primaryVal = perPersonMode ? perPersonVal : item.value;
-  const secondaryVal = perPersonMode ? item.value : (groupSize > 1 ? perPersonVal : null);
-  const secondaryLabel = perPersonMode ? `${currency} ${item.value.toLocaleString()} total` : `${currency} ${perPersonVal.toLocaleString()} /person`;
   const note = budgetMathNote(item.key, item.value, currency, nights, groupSize);
 
   const hasRange = item.key === "transport" && item.range?.min != null && item.range?.max != null && item.range.min !== item.range.max;
+  const dispRangeMin = hasRange ? (perPersonMode ? Math.round(item.range.min / groupSize) : Math.round(item.range.min)) : null;
+  const dispRangeMax = hasRange ? (perPersonMode ? Math.round(item.range.max / groupSize) : Math.round(item.range.max)) : null;
   const bd = item.breakdown;
 
   return (
@@ -841,23 +846,17 @@ function BudgetRow({ item, total, currency, nights, groupSize, perPersonMode, tr
           {hasRange ? (
             <>
               <div style={{ color: "var(--text-muted)", fontSize: "0.88rem" }}>
-                {currency} {Math.round(item.range.min).toLocaleString()} – {Math.round(item.range.max).toLocaleString()}
+                {currency} {dispRangeMin.toLocaleString()} – {dispRangeMax.toLocaleString()}
               </div>
               <div style={{ color: "var(--text-muted)", fontSize: "0.72rem", opacity: 0.55 }}>
-                est. midpoint {currency} {primaryVal.toLocaleString()}
+                est. midpoint {currency} {primaryVal.toLocaleString()}{perPersonMode ? " /person" : ""}
               </div>
             </>
           ) : (
-            <>
-              <div style={{ color: "var(--text-muted)", fontSize: "0.88rem" }}>
-                {currency} {primaryVal.toLocaleString()}
-              </div>
-              {secondaryVal != null && (
-                <div style={{ color: "var(--text-muted)", fontSize: "0.75rem", opacity: 0.55 }}>
-                  {secondaryLabel}
-                </div>
-              )}
-            </>
+            <div style={{ color: "var(--text-muted)", fontSize: "0.88rem" }}>
+              {currency} {primaryVal.toLocaleString()}
+              {perPersonMode && <span style={{ fontSize: "0.72rem", opacity: 0.65, marginLeft: 3 }}>/person</span>}
+            </div>
           )}
         </div>
       </div>
@@ -888,10 +887,10 @@ function BudgetRow({ item, total, currency, nights, groupSize, perPersonMode, tr
           {bd.international?.min != null && (
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.78rem", color: "var(--text-muted)" }}>
               <span>
-                {transportMode === "own_car" ? "⛽ Fuel & tolls (round-trip)" :
-                 transportMode === "car_rental" ? "🚗 Rental + fuel" :
-                 transportMode === "bus_train" ? "🚌 Bus / Train (round-trip)" :
-                 "✈️ Flights (round-trip)"}
+                {transportMode === "own_car" ? "⛽ Fuel & tolls (per person)" :
+                 transportMode === "car_rental" ? "🚗 Rental + fuel (per person)" :
+                 transportMode === "bus_train" ? "🚌 Bus / Train (per person)" :
+                 "✈️ Flights (per person)"}
               </span>
               <span>{currency} {Math.round(bd.international.min).toLocaleString()} – {Math.round(bd.international.max).toLocaleString()}</span>
             </div>
@@ -899,7 +898,7 @@ function BudgetRow({ item, total, currency, nights, groupSize, perPersonMode, tr
           {bd.local > 0 && (
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.78rem", color: "var(--text-muted)" }}>
               <span>🚌 Local transport</span>
-              <span>{currency} {Math.round(bd.local).toLocaleString()}</span>
+              <span>{currency} {Math.round(perPersonMode ? bd.local / groupSize : bd.local).toLocaleString()}</span>
             </div>
           )}
           {bd.international?.note && (
@@ -931,7 +930,21 @@ function TabBudget({ budget, prefs }) {
   const groupSize = prefs?.group_size ?? 1;
 
   const perPersonMode = prefs?.budget_type === "per_person";
-  const grandTotal = budget.grand_total ?? 0;
+
+  // Recompute transport total/range from breakdown (LLM often miscalculates transport_range)
+  let transportTotal = budget.transport_total || 0;
+  let transportRange = budget.transport_range;
+  const tbd = budget.transport_breakdown;
+  if (tbd?.international?.min != null && tbd?.international?.max != null) {
+    const local = tbd.local || 0;
+    const corrMin = Math.round(tbd.international.min * groupSize + local);
+    const corrMax = Math.round(tbd.international.max * groupSize + local);
+    transportTotal = Math.round((tbd.international.min + tbd.international.max) / 2 * groupSize + local);
+    transportRange = { min: corrMin, max: corrMax };
+  }
+
+  const grandTotal = (budget.hotels_total || 0) + (budget.activities_total || 0) +
+    (budget.food_total || 0) + transportTotal + (budget.shopping_misc_total || 0) || budget.grand_total || 0;
   const grandPerPerson = Math.round(grandTotal / groupSize);
 
   // ±10% confidence range
@@ -953,8 +966,8 @@ function TabBudget({ budget, prefs }) {
     { key: "hotels",   label: "🏨 Hotels",         value: budget.hotels_total,        color: "#0d9488" },
     { key: "activities", label: "🎭 Experiences & Attractions", value: budget.activities_total, color: "#8b5cf6" },
     { key: "food",     label: "🍽️ Food",            value: budget.food_total,          color: "#f59e0b" },
-    { key: "transport",label: "🚗 Transportation",   value: budget.transport_total,     color: "#3b82f6",
-      range: budget.transport_range, breakdown: budget.transport_breakdown },
+    { key: "transport",label: "🚗 Transportation",   value: transportTotal,             color: "#3b82f6",
+      range: transportRange, breakdown: budget.transport_breakdown },
     { key: "shopping", label: "🛍️ Shopping, Miscellaneous & Incidentals", value: budget.shopping_misc_total, color: "#ec4899" },
   ].filter((i) => i.value > 0);
 
@@ -1026,33 +1039,15 @@ function TabBudget({ budget, prefs }) {
         <div style={styles.budgetSummary}>
           <div style={{ display: "flex", gap: 24, alignItems: "flex-end", flexWrap: "wrap" }}>
             {perPersonMode ? (
-              <>
-                <div>
-                  <div style={styles.budgetTotal}>{prefs?.currency} {rangeMinPP.toLocaleString()} – {rangeMaxPP.toLocaleString()}</div>
-                  <div style={styles.budgetLabel}>Est. per person</div>
-                </div>
-                <div>
-                  <div style={{ ...styles.budgetTotal, fontSize: "1.3rem", color: "var(--text-secondary)" }}>
-                    {prefs?.currency} {rangeMin.toLocaleString()} – {rangeMax.toLocaleString()}
-                  </div>
-                  <div style={styles.budgetLabel}>Est. total · {groupSize} travelers</div>
-                </div>
-              </>
+              <div>
+                <div style={styles.budgetTotal}>{prefs?.currency} {rangeMinPP.toLocaleString()} – {rangeMaxPP.toLocaleString()}</div>
+                <div style={styles.budgetLabel}>Est. per person</div>
+              </div>
             ) : (
-              <>
-                <div>
-                  <div style={styles.budgetTotal}>{prefs?.currency} {rangeMin.toLocaleString()} – {rangeMax.toLocaleString()}</div>
-                  <div style={styles.budgetLabel}>Est. total · {groupSize} traveler{groupSize !== 1 ? "s" : ""}</div>
-                </div>
-                {groupSize > 1 && (
-                  <div>
-                    <div style={{ ...styles.budgetTotal, fontSize: "1.3rem", color: "var(--text-secondary)" }}>
-                      {prefs?.currency} {rangeMinPP.toLocaleString()} – {rangeMaxPP.toLocaleString()}
-                    </div>
-                    <div style={styles.budgetLabel}>Est. per person</div>
-                  </div>
-                )}
-              </>
+              <div>
+                <div style={styles.budgetTotal}>{prefs?.currency} {rangeMin.toLocaleString()} – {rangeMax.toLocaleString()}</div>
+                <div style={styles.budgetLabel}>Est. total · {groupSize} traveler{groupSize !== 1 ? "s" : ""}</div>
+              </div>
             )}
           </div>
           <div style={{
@@ -1117,11 +1112,19 @@ function TabBudget({ budget, prefs }) {
             const estColor = isWithinBudget ? "#10b981" : "#ef4444";
             return (
               <div style={styles.budgetCompare}>
-                <CompareRow label="Your Budget (total)" value={enteredTotal} currency={prefs.currency} color="var(--cal-accent)" />
-                {groupSize > 1 && <CompareRow label="Your Budget (per person)" value={Math.round(enteredPerPerson)} currency={prefs.currency} color="var(--cal-accent)" dim />}
-                <div style={styles.divider} />
-                <CompareRow label="AI Estimate range (total)" valueRange={[rangeMin, rangeMax]} currency={prefs.currency} color={estColor} />
-                {groupSize > 1 && <CompareRow label="AI Estimate range (per person)" valueRange={[rangeMinPP, rangeMaxPP]} currency={prefs.currency} color={estColor} dim />}
+                {perPersonMode ? (
+                  <>
+                    <CompareRow label="Your Budget (per person)" value={Math.round(enteredPerPerson)} currency={prefs.currency} color="var(--cal-accent)" />
+                    <div style={styles.divider} />
+                    <CompareRow label="AI Estimate range (per person)" valueRange={[rangeMinPP, rangeMaxPP]} currency={prefs.currency} color={estColor} />
+                  </>
+                ) : (
+                  <>
+                    <CompareRow label="Your Budget (total)" value={enteredTotal} currency={prefs.currency} color="var(--cal-accent)" />
+                    <div style={styles.divider} />
+                    <CompareRow label="AI Estimate range (total)" valueRange={[rangeMin, rangeMax]} currency={prefs.currency} color={estColor} />
+                  </>
+                )}
               </div>
             );
           })()}
