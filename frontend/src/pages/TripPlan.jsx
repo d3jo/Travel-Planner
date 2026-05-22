@@ -887,12 +887,12 @@ function BudgetRow({ item, total, currency, nights, groupSize, perPersonMode, tr
           {bd.international?.min != null && (
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.78rem", color: "var(--text-muted)" }}>
               <span>
-                {transportMode === "own_car" ? "⛽ Fuel & tolls (per person)" :
-                 transportMode === "car_rental" ? "🚗 Rental + fuel (per person)" :
-                 transportMode === "bus_train" ? "🚌 Bus / Train (per person)" :
-                 "✈️ Flights (per person)"}
+                {transportMode === "own_car" ? "⛽ Fuel & tolls" :
+                 transportMode === "car_rental" ? "🚗 Rental + fuel" :
+                 transportMode === "bus_train" ? "🚌 Bus / Train" :
+                 "✈️ Flights"}{perPersonMode ? " (per person)" : " (total)"}
               </span>
-              <span>{currency} {Math.round(bd.international.min).toLocaleString()} – {Math.round(bd.international.max).toLocaleString()}</span>
+              <span>{currency} {Math.round(perPersonMode ? bd.international.min / groupSize : bd.international.min).toLocaleString()} – {Math.round(perPersonMode ? bd.international.max / groupSize : bd.international.max).toLocaleString()}</span>
             </div>
           )}
           {bd.local > 0 && (
@@ -919,7 +919,6 @@ function BudgetRow({ item, total, currency, nights, groupSize, perPersonMode, tr
 function TabBudget({ budget, prefs }) {
   if (!budget) return <EmptyState>No budget breakdown available.</EmptyState>;
 
-  const total = budget.grand_total || 1;
   const nights = (() => {
     try {
       const d1 = new Date(prefs?.start_date);
@@ -931,20 +930,23 @@ function TabBudget({ budget, prefs }) {
 
   const perPersonMode = prefs?.budget_type === "per_person";
 
-  // Recompute transport total/range from breakdown (LLM often miscalculates transport_range)
+  // Recompute transport total/range from breakdown.
+  // international.min/max = TOTAL cost for the group (LLM outputs group totals despite per-person label).
+  // Do NOT multiply by groupSize — the LLM already accounts for group size.
   let transportTotal = budget.transport_total || 0;
   let transportRange = budget.transport_range;
   const tbd = budget.transport_breakdown;
   if (tbd?.international?.min != null && tbd?.international?.max != null) {
     const local = tbd.local || 0;
-    const corrMin = Math.round(tbd.international.min * groupSize + local);
-    const corrMax = Math.round(tbd.international.max * groupSize + local);
-    transportTotal = Math.round((tbd.international.min + tbd.international.max) / 2 * groupSize + local);
+    const corrMin = Math.round(tbd.international.min + local);
+    const corrMax = Math.round(tbd.international.max + local);
+    transportTotal = Math.round((tbd.international.min + tbd.international.max) / 2 + local);
     transportRange = { min: corrMin, max: corrMax };
   }
 
   const grandTotal = (budget.hotels_total || 0) + (budget.activities_total || 0) +
     (budget.food_total || 0) + transportTotal + (budget.shopping_misc_total || 0) || budget.grand_total || 0;
+  const total = grandTotal || 1;
   const grandPerPerson = Math.round(grandTotal / groupSize);
 
   // ±10% confidence range
