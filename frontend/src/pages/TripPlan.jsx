@@ -5,7 +5,10 @@ import { useIsDarkMode } from "../contexts/ThemeContext";
 import { useAuth } from "../contexts/AuthContext";
 import api from "../api";
 
-const TABS = ["Overview", "Hotels", "Experiences", "Food", "Transportation", "Itinerary", "Budget"];
+function getTabs(nights) {
+  const scheduleTab = nights > 7 ? "Weekly Plan" : "Itinerary";
+  return ["Overview", "Hotels", "Experiences", "Food", "Transportation", scheduleTab, "Budget"];
+}
 
 // Inject custom scrollbar styles once
 const scrollbarCSS = `
@@ -44,6 +47,14 @@ export default function TripPlan() {
   const isDarkMode = useIsDarkMode();
   const prefs = loc.state?.preferences;
 
+  const nights = (() => {
+    try {
+      const d1 = new Date(prefs?.start_date);
+      const d2 = new Date(prefs?.end_date);
+      return Math.max(1, Math.round((d2 - d1) / 86400000));
+    } catch { return 1; }
+  })();
+  const TABS = getTabs(nights);
   const [activeTab, setActiveTab] = useState("Overview");
   const { isLoggedIn } = useAuth();
   const [saving, setSaving] = useState(false);
@@ -185,6 +196,7 @@ export default function TripPlan() {
               {activeTab === "Food"        && <TabFood foodSpots={plan.food_spots || []} destination={prefs?.destination} />}
               {activeTab === "Transportation" && <TabTransportation options={plan.transportation_options || []} currency={prefs?.currency} origin={prefs?.origin} destination={prefs?.destination} overrideNote={plan._transport_override} />}
               {activeTab === "Itinerary"   && <TabItinerary itinerary={plan.itinerary || []} currency={prefs?.currency} />}
+              {activeTab === "Weekly Plan" && <TabWeeklyPlan weeklyPlan={plan.weekly_plan || []} destination={prefs?.destination} />}
               {activeTab === "Budget"      && <TabBudget budget={plan.budget_breakdown} prefs={prefs} />}
             </motion.div>
           </AnimatePresence>
@@ -582,6 +594,137 @@ function TabTransportation({ options, currency, origin, destination, overrideNot
 
 
 
+// ─── Weekly Plan Tab ──────────────────────────────────────────────────────────
+function TabWeeklyPlan({ weeklyPlan, destination }) {
+  if (!weeklyPlan.length) return <EmptyState>No weekly plan available.</EmptyState>;
+  const mapsSearch = (q) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q + " " + (destination || ""))}`;
+  const weekColors = ["#0d9488", "#8b5cf6", "#f59e0b", "#3b82f6", "#ec4899", "#4ade80", "#fb923c", "#38bdf8"];
+
+  return (
+    <div style={styles.tabContent}>
+      {weeklyPlan.map((week, i) => {
+        const accent = weekColors[i % weekColors.length];
+        return (
+          <div key={i} style={{
+            ...styles.card,
+            borderLeft: `3px solid ${accent}`,
+          }}>
+            {/* Week header */}
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 10, flexWrap: "wrap" }}>
+              <div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
+                  <span style={{
+                    fontSize: "0.72rem", fontWeight: 800, textTransform: "uppercase",
+                    letterSpacing: "0.08em", color: accent,
+                    background: `${accent}18`, border: `1px solid ${accent}44`,
+                    borderRadius: 999, padding: "3px 10px",
+                  }}>
+                    Week {week.week}
+                  </span>
+                  {week.dates && (
+                    <span style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>
+                      {week.dates}
+                    </span>
+                  )}
+                </div>
+                <div style={{
+                  fontSize: "1.1rem", fontWeight: 700,
+                  fontFamily: '"Pixelify Sans", sans-serif',
+                  color: "var(--white)",
+                }}>
+                  {week.theme}
+                </div>
+              </div>
+            </div>
+
+            {/* Focus */}
+            {week.focus && (
+              <p style={{ margin: "0 0 12px", fontSize: "0.88rem", color: "var(--white)", lineHeight: 1.6 }}>
+                {week.focus}
+              </p>
+            )}
+
+            {/* Highlights */}
+            {week.highlights?.length > 0 && (
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--text-muted)", marginBottom: 8 }}>
+                  Highlights
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {week.highlights.map((h, j) => (
+                    <a
+                      key={j}
+                      href={mapsSearch(h)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        display: "flex", alignItems: "flex-start", gap: 8,
+                        padding: "7px 10px", borderRadius: 8,
+                        background: "rgba(255,255,255,0.04)",
+                        border: "1px solid var(--border-col)",
+                        textDecoration: "none",
+                        transition: "background 0.15s",
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.08)"}
+                      onMouseLeave={e => e.currentTarget.style.background = "rgba(255,255,255,0.04)"}
+                    >
+                      <span style={{ color: accent, fontSize: "0.78rem", flexShrink: 0, marginTop: 1 }}>▸</span>
+                      <span style={{ fontSize: "0.88rem", color: "var(--white)", lineHeight: 1.45 }}>{h}</span>
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Excursions */}
+            {week.suggested_excursions?.length > 0 && (
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--text-muted)", marginBottom: 8 }}>
+                  Day Trips & Excursions
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+                  {week.suggested_excursions.map((ex, j) => (
+                    <a
+                      key={j}
+                      href={mapsSearch(ex)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        display: "inline-flex", alignItems: "center", gap: 5,
+                        padding: "5px 12px", borderRadius: 999,
+                        background: `${accent}12`, border: `1px solid ${accent}44`,
+                        fontSize: "0.82rem", color: accent, textDecoration: "none",
+                        fontWeight: 600, transition: "background 0.15s",
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.background = `${accent}22`}
+                      onMouseLeave={e => e.currentTarget.style.background = `${accent}12`}
+                    >
+                      🗺️ {ex}
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Pacing note */}
+            {week.pacing_note && (
+              <div style={{
+                display: "flex", alignItems: "flex-start", gap: 8,
+                padding: "8px 12px", borderRadius: 8,
+                background: "rgba(56,189,248,0.06)",
+                border: "1px solid rgba(56,189,248,0.18)",
+              }}>
+                <span style={{ fontSize: "0.78rem", flexShrink: 0 }}>💡</span>
+                <span style={{ fontSize: "0.8rem", color: "var(--text-muted)", lineHeight: 1.5 }}>{week.pacing_note}</span>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ─── Itinerary Tab ────────────────────────────────────────────────────────────
 function TabItinerary({ itinerary, currency }) {
   const [openDay, setOpenDay] = useState(0);
@@ -664,7 +807,7 @@ function budgetMathNote(key, value, currency, nights, groupSize) {
     case "food":
       return `${currency} ${fmt(perPerson / n)} /person/day × ${g} traveler${g !== 1 ? "s" : ""} × ${n} days`;
     case "transport":
-      return `${currency} ${fmt(perPerson)} /person (midpoint) × ${g} traveler${g !== 1 ? "s" : ""}`;
+      return `${currency} ${fmt(perPerson)} /person incl. flights (group total ÷ ${g} traveler${g !== 1 ? "s" : ""})`;
     case "shopping":
       return `${currency} ${fmt(perPerson / n)} /person/day × ${g} traveler${g !== 1 ? "s" : ""} × ${n} nights`;
     default: return null;
@@ -791,10 +934,20 @@ function TabBudget({ budget, prefs }) {
   const grandTotal = budget.grand_total ?? 0;
   const grandPerPerson = Math.round(grandTotal / groupSize);
 
+  // ±10% confidence range
+  const rangeMin = Math.round(grandTotal * 0.9);
+  const rangeMax = Math.round(grandTotal * 1.1);
+  const rangeMinPP = Math.round(rangeMin / groupSize);
+  const rangeMaxPP = Math.round(rangeMax / groupSize);
+
   const enteredTotal = prefs?.budget
     ? (perPersonMode ? prefs.budget * groupSize : prefs.budget)
     : null;
-  const isWithinBudget = enteredTotal != null ? grandTotal <= enteredTotal : isWithinBudget;
+  // Within budget if user's budget falls anywhere inside the ±10% range
+  const isWithinBudget = enteredTotal != null
+    ? enteredTotal >= rangeMin && enteredTotal <= rangeMax
+    : true;
+  const isOverBudget = enteredTotal != null && enteredTotal < rangeMin;
 
   const items = [
     { key: "hotels",   label: "🏨 Hotels",         value: budget.hotels_total,        color: "#0d9488" },
@@ -875,28 +1028,28 @@ function TabBudget({ budget, prefs }) {
             {perPersonMode ? (
               <>
                 <div>
-                  <div style={styles.budgetTotal}>{prefs?.currency} {grandPerPerson.toLocaleString()}</div>
-                  <div style={styles.budgetLabel}>Per person</div>
+                  <div style={styles.budgetTotal}>{prefs?.currency} {rangeMinPP.toLocaleString()} – {rangeMaxPP.toLocaleString()}</div>
+                  <div style={styles.budgetLabel}>Est. per person</div>
                 </div>
                 <div>
                   <div style={{ ...styles.budgetTotal, fontSize: "1.3rem", color: "var(--text-secondary)" }}>
-                    {prefs?.currency} {grandTotal.toLocaleString()}
+                    {prefs?.currency} {rangeMin.toLocaleString()} – {rangeMax.toLocaleString()}
                   </div>
-                  <div style={styles.budgetLabel}>Total · {groupSize} travelers</div>
+                  <div style={styles.budgetLabel}>Est. total · {groupSize} travelers</div>
                 </div>
               </>
             ) : (
               <>
                 <div>
-                  <div style={styles.budgetTotal}>{prefs?.currency} {grandTotal.toLocaleString()}</div>
-                  <div style={styles.budgetLabel}>Total · {groupSize} traveler{groupSize !== 1 ? "s" : ""}</div>
+                  <div style={styles.budgetTotal}>{prefs?.currency} {rangeMin.toLocaleString()} – {rangeMax.toLocaleString()}</div>
+                  <div style={styles.budgetLabel}>Est. total · {groupSize} traveler{groupSize !== 1 ? "s" : ""}</div>
                 </div>
                 {groupSize > 1 && (
                   <div>
                     <div style={{ ...styles.budgetTotal, fontSize: "1.3rem", color: "var(--text-secondary)" }}>
-                      {prefs?.currency} {grandPerPerson.toLocaleString()}
+                      {prefs?.currency} {rangeMinPP.toLocaleString()} – {rangeMaxPP.toLocaleString()}
                     </div>
-                    <div style={styles.budgetLabel}>Per person</div>
+                    <div style={styles.budgetLabel}>Est. per person</div>
                   </div>
                 )}
               </>
@@ -908,7 +1061,7 @@ function TabBudget({ budget, prefs }) {
             border: `1px solid ${isWithinBudget ? "var(--cal-accent)" : "#ef4444"}`,
             color: isWithinBudget ? "var(--cal-accent-fg)" : "#fca5a5",
           }}>
-            {isWithinBudget ? "✅ Within Budget" : "⚠️ Over Budget"}
+            {isWithinBudget ? "✅ Within Budget" : isOverBudget ? "⚠️ Over Budget" : "✅ Under Budget"}
           </div>
         </div>
 
@@ -923,6 +1076,34 @@ function TabBudget({ budget, prefs }) {
         )}
       </Card>
 
+      {prefs?.budget && (() => {
+        const gs = prefs.group_size ?? 1;
+        const entTotal = prefs.budget_type === "per_person" ? prefs.budget * gs : prefs.budget;
+        const perPersonPerDay = entTotal / gs / Math.max(nights, 1);
+        const estimateTotal = budget.grand_total ?? 0;
+        const severely = estimateTotal > 0 && entTotal < estimateTotal * 0.5;
+        const tooLow = perPersonPerDay < 30;
+        if (!severely && !tooLow) return null;
+        return (
+          <div style={{
+            padding: "14px 18px", borderRadius: 12,
+            background: "rgba(239,68,68,0.1)",
+            border: "1.5px solid rgba(239,68,68,0.5)",
+            fontSize: "0.88rem", color: "var(--white)", lineHeight: 1.6,
+          }}>
+            <div style={{ fontWeight: 800, color: "#f87171", marginBottom: 6, fontSize: "0.95rem" }}>
+              ⚠️ Budget Warning
+            </div>
+            {tooLow && (
+              <div>Your budget works out to only <strong>{prefs.currency} {Math.round(perPersonPerDay)}/person/day</strong> — this is below the minimum needed for meals, transport, and accommodation in most destinations. Consider increasing your budget significantly.</div>
+            )}
+            {!tooLow && severely && (
+              <div>Your entered budget of <strong>{prefs.currency} {entTotal.toLocaleString()}</strong> is less than half of the AI's realistic estimate of <strong>{prefs.currency} {estimateTotal.toLocaleString()}</strong>. This trip is likely not feasible at your current budget — consider raising it or shortening the trip.</div>
+            )}
+          </div>
+        );
+      })()}
+
       {prefs?.budget && (
         <Card title="Budget vs. Estimate">
           {(() => {
@@ -933,23 +1114,14 @@ function TabBudget({ budget, prefs }) {
             const enteredPerPerson = prefs.budget_type === "per_person"
               ? prefs.budget
               : prefs.budget / groupSize;
-            const estimateTotal = budget.grand_total ?? 0;
-            const estimatePerPerson = estimateTotal / groupSize;
-            const diff = enteredTotal - estimateTotal;
+            const estColor = isWithinBudget ? "#10b981" : "#ef4444";
             return (
               <div style={styles.budgetCompare}>
                 <CompareRow label="Your Budget (total)" value={enteredTotal} currency={prefs.currency} color="var(--cal-accent)" />
                 {groupSize > 1 && <CompareRow label="Your Budget (per person)" value={Math.round(enteredPerPerson)} currency={prefs.currency} color="var(--cal-accent)" dim />}
                 <div style={styles.divider} />
-                <CompareRow label="AI Estimate (total)" value={estimateTotal} currency={prefs.currency} color={isWithinBudget ? "#10b981" : "#ef4444"} />
-                {groupSize > 1 && <CompareRow label="AI Estimate (per person)" value={Math.round(estimatePerPerson)} currency={prefs.currency} color={isWithinBudget ? "#10b981" : "#ef4444"} dim />}
-                <div style={styles.divider} />
-                <CompareRow
-                  label={diff >= 0 ? "Remaining" : "Overage"}
-                  value={Math.abs(Math.round(diff))}
-                  currency={prefs.currency}
-                  color={diff >= 0 ? "#10b981" : "#ef4444"}
-                />
+                <CompareRow label="AI Estimate range (total)" valueRange={[rangeMin, rangeMax]} currency={prefs.currency} color={estColor} />
+                {groupSize > 1 && <CompareRow label="AI Estimate range (per person)" valueRange={[rangeMinPP, rangeMaxPP]} currency={prefs.currency} color={estColor} dim />}
               </div>
             );
           })()}
@@ -957,7 +1129,7 @@ function TabBudget({ budget, prefs }) {
             const enteredTotal = prefs.budget_type === "per_person"
               ? prefs.budget * (prefs.group_size ?? 1)
               : prefs.budget;
-            const diff = enteredTotal - (budget.grand_total ?? 0);
+            const diff = enteredTotal - grandTotal;
             const pct = enteredTotal > 0 ? Math.abs(diff) / enteredTotal : 0;
             if (pct < 0.08) return null;
             const isUnder = diff > 0;
@@ -1040,12 +1212,15 @@ function EmptyState({ children }) {
   return <div style={styles.emptyState}>{children}</div>;
 }
 
-function CompareRow({ label, value, currency, color, dim }) {
+function CompareRow({ label, value, valueRange, currency, color, dim }) {
+  const display = valueRange
+    ? `${currency} ${valueRange[0].toLocaleString()} – ${valueRange[1].toLocaleString()}`
+    : `${currency} ${value?.toLocaleString?.() ?? value}`;
   return (
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: dim ? "3px 0" : "6px 0", opacity: dim ? 0.65 : 1 }}>
       <span style={{ color: "var(--text-muted)", fontSize: dim ? "0.8rem" : "0.9rem" }}>{label}</span>
       <span style={{ color, fontWeight: dim ? 500 : 700, fontFamily: dim ? "inherit" : '"Pixelify Sans", sans-serif', fontSize: dim ? "0.85rem" : "1rem" }}>
-        {currency} {value?.toLocaleString?.() ?? value}
+        {display}
       </span>
     </div>
   );

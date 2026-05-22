@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useGeneration } from "../contexts/GenerationContext";
 import { DayPicker } from "react-day-picker";
 import { AnimatePresence, motion, Reorder } from "framer-motion";
 import { ComposableMap, Geographies, Geography, ZoomableGroup, Marker as MapMarker } from "react-simple-maps";
 import "react-day-picker/dist/style.css";
-import api, { getBaseUrl } from "../api";
+import api from "../api";
 import { useIsDarkMode, useTheme } from "../contexts/ThemeContext";
 import ThemeToggle from "../components/ThemeToggle";
 
@@ -291,54 +291,137 @@ const CONTINENTS = [
   { name: "AUSTRALIA",     coords: [133, -27] },
 ];
 
+// tier 1 = always visible, tier 2 = zoom >= 2.8, tier 3 = zoom >= 4.5
 const MAJOR_CITIES = [
-  { name: "New York",     coords: [40.7128, -74.0060] },
-  { name: "Los Angeles",  coords: [34.0522, -118.2437] },
-  { name: "Chicago",      coords: [41.8781, -87.6298] },
-  { name: "Mexico City",  coords: [19.4326, -99.1332] },
-  { name: "Toronto",      coords: [43.6532, -79.3832] },
-  { name: "Bogotá",       coords: [4.7110, -74.0721] },
-  { name: "Lima",         coords: [-12.0464, -77.0428] },
-  { name: "Buenos Aires", coords: [-34.6037, -58.3816] },
-  { name: "São Paulo",    coords: [-23.5505, -46.6333] },
-  { name: "London",       coords: [51.5074, -0.1278] },
-  { name: "Paris",        coords: [48.8566, 2.3522] },
-  { name: "Madrid",       coords: [40.4168, -3.7038] },
-  { name: "Rome",         coords: [41.9028, 12.4964] },
-  { name: "Berlin",       coords: [52.5200, 13.4050] },
-  { name: "Istanbul",     coords: [41.0082, 28.9784] },
-  { name: "Cairo",        coords: [30.0444, 31.2357] },
-  { name: "Lagos",        coords: [6.5244, 3.3792] },
-  { name: "Nairobi",      coords: [-1.2921, 36.8219] },
-  { name: "Cape Town",    coords: [-33.9249, 18.4241] },
-  { name: "Dubai",        coords: [25.2048, 55.2708] },
-  { name: "Mumbai",       coords: [19.0760, 72.8777] },
-  { name: "Delhi",        coords: [28.6139, 77.2090] },
-  { name: "Bangkok",      coords: [13.7563, 100.5018] },
-  { name: "Singapore",    coords: [1.3521, 103.8198] },
-  { name: "Tokyo",        coords: [35.6762, 139.6503] },
-  { name: "Seoul",        coords: [37.5665, 126.9780] },
-  { name: "Beijing",      coords: [39.9042, 116.4074] },
-  { name: "Sydney",       coords: [-33.8688, 151.2093] },
-  { name: "Melbourne",    coords: [-37.8136, 144.9631] },
-  { name: "Auckland",     coords: [-36.8509, 174.7645] },
-  { name: "Vancouver",    coords: [49.2827, -123.1207] },
-  { name: "Miami",        coords: [25.7617, -80.1918] },
-  { name: "Santiago",     coords: [-33.4489, -70.6693] },
-  { name: "Lisbon",       coords: [38.7223, -9.1393] },
-  { name: "Amsterdam",    coords: [52.3676, 4.9041] },
-  { name: "Athens",       coords: [37.9838, 23.7275] },
-  { name: "Johannesburg", coords: [-26.2041, 28.0473] },
-  { name: "Jakarta",      coords: [-6.2088, 106.8456] },
-  { name: "Hong Kong",    coords: [22.3193, 114.1694] },
-  { name: "Osaka",        coords: [34.6937, 135.5023] },
-  { name: "Moscow",       coords: [55.7558, 37.6173] },
-  { name: "Tehran",       coords: [35.6892, 51.3890] },
-  { name: "Riyadh",       coords: [24.7136, 46.6753] },
-  { name: "Tel Aviv",     coords: [32.0853, 34.7818] },
-  { name: "Baku",         coords: [40.4093, 49.8671] },
-  { name: "Tashkent",     coords: [41.2995, 69.2401] },
-  { name: "Almaty",       coords: [43.2389, 76.8897] },
+  // ── Tier 1: global megacities ──────────────────────────────────────────────
+  { name: "New York",        coords: [40.7128,  -74.0060],  tier: 1 },
+  { name: "London",          coords: [51.5074,   -0.1278],  tier: 1 },
+  { name: "Paris",           coords: [48.8566,    2.3522],  tier: 1 },
+  { name: "Tokyo",           coords: [35.6762,  139.6503],  tier: 1 },
+  { name: "Beijing",         coords: [39.9042,  116.4074],  tier: 1 },
+  { name: "Mumbai",          coords: [19.0760,   72.8777],  tier: 1 },
+  { name: "São Paulo",       coords: [-23.5505,  -46.6333], tier: 1 },
+  { name: "Mexico City",     coords: [19.4326,  -99.1332],  tier: 1 },
+  { name: "Cairo",           coords: [30.0444,   31.2357],  tier: 1 },
+  { name: "Dubai",           coords: [25.2048,   55.2708],  tier: 1 },
+  { name: "Sydney",          coords: [-33.8688,  151.2093], tier: 1 },
+  { name: "Moscow",          coords: [55.7558,   37.6173],  tier: 1 },
+  { name: "Buenos Aires",    coords: [-34.6037,  -58.3816], tier: 1 },
+  { name: "Lagos",           coords: [6.5244,     3.3792],  tier: 1 },
+  { name: "Seoul",           coords: [37.5665,  126.9780],  tier: 1 },
+
+  // ── Tier 2: major regional cities ─────────────────────────────────────────
+  { name: "Los Angeles",     coords: [34.0522,  -118.2437], tier: 2 },
+  { name: "Chicago",         coords: [41.8781,   -87.6298], tier: 2 },
+  { name: "Toronto",         coords: [43.6532,   -79.3832], tier: 2 },
+  { name: "Vancouver",       coords: [49.2827,  -123.1207], tier: 2 },
+  { name: "Miami",           coords: [25.7617,   -80.1918], tier: 2 },
+  { name: "Bogotá",          coords: [4.7110,    -74.0721], tier: 2 },
+  { name: "Lima",            coords: [-12.0464,  -77.0428], tier: 2 },
+  { name: "Santiago",        coords: [-33.4489,  -70.6693], tier: 2 },
+  { name: "Madrid",          coords: [40.4168,    -3.7038], tier: 2 },
+  { name: "Rome",            coords: [41.9028,   12.4964],  tier: 2 },
+  { name: "Berlin",          coords: [52.5200,   13.4050],  tier: 2 },
+  { name: "Amsterdam",       coords: [52.3676,    4.9041],  tier: 2 },
+  { name: "Lisbon",          coords: [38.7223,    -9.1393], tier: 2 },
+  { name: "Athens",          coords: [37.9838,   23.7275],  tier: 2 },
+  { name: "Istanbul",        coords: [41.0082,   28.9784],  tier: 2 },
+  { name: "Tel Aviv",        coords: [32.0853,   34.7818],  tier: 2 },
+  { name: "Riyadh",          coords: [24.7136,   46.6753],  tier: 2 },
+  { name: "Tehran",          coords: [35.6892,   51.3890],  tier: 2 },
+  { name: "Delhi",           coords: [28.6139,   77.2090],  tier: 2 },
+  { name: "Bangkok",         coords: [13.7563,  100.5018],  tier: 2 },
+  { name: "Singapore",       coords: [1.3521,   103.8198],  tier: 2 },
+  { name: "Hong Kong",       coords: [22.3193,  114.1694],  tier: 2 },
+  { name: "Osaka",           coords: [34.6937,  135.5023],  tier: 2 },
+  { name: "Jakarta",         coords: [-6.2088,  106.8456],  tier: 2 },
+  { name: "Melbourne",       coords: [-37.8136,  144.9631], tier: 2 },
+  { name: "Auckland",        coords: [-36.8509,  174.7645], tier: 2 },
+  { name: "Nairobi",         coords: [-1.2921,   36.8219],  tier: 2 },
+  { name: "Cape Town",       coords: [-33.9249,  18.4241],  tier: 2 },
+  { name: "Johannesburg",    coords: [-26.2041,  28.0473],  tier: 2 },
+  { name: "Baku",            coords: [40.4093,   49.8671],  tier: 2 },
+
+  // ── Tier 3: smaller / regional cities ─────────────────────────────────────
+  { name: "San Francisco",   coords: [37.7749,  -122.4194], tier: 3 },
+  { name: "Seattle",         coords: [47.6062,  -122.3321], tier: 3 },
+  { name: "Boston",          coords: [42.3601,   -71.0589], tier: 3 },
+  { name: "Houston",         coords: [29.7604,   -95.3698], tier: 3 },
+  { name: "Atlanta",         coords: [33.7490,   -84.3880], tier: 3 },
+  { name: "Montreal",        coords: [45.5017,   -73.5673], tier: 3 },
+  { name: "Calgary",         coords: [51.0447,  -114.0719], tier: 3 },
+  { name: "Caracas",         coords: [10.4806,   -66.9036], tier: 3 },
+  { name: "Montevideo",      coords: [-34.9011,  -56.1645], tier: 3 },
+  { name: "Barcelona",       coords: [41.3851,    2.1734],  tier: 3 },
+  { name: "Munich",          coords: [48.1351,   11.5820],  tier: 3 },
+  { name: "Hamburg",         coords: [53.5753,    9.9929],  tier: 3 },
+  { name: "Vienna",          coords: [48.2082,   16.3738],  tier: 3 },
+  { name: "Prague",          coords: [50.0755,   14.4378],  tier: 3 },
+  { name: "Budapest",        coords: [47.4979,   19.0402],  tier: 3 },
+  { name: "Warsaw",          coords: [52.2297,   21.0122],  tier: 3 },
+  { name: "Stockholm",       coords: [59.3293,   18.0686],  tier: 3 },
+  { name: "Copenhagen",      coords: [55.6761,   12.5683],  tier: 3 },
+  { name: "Oslo",            coords: [59.9139,   10.7522],  tier: 3 },
+  { name: "Helsinki",        coords: [60.1699,   24.9384],  tier: 3 },
+  { name: "Brussels",        coords: [50.8503,    4.3517],  tier: 3 },
+  { name: "Zurich",          coords: [47.3769,    8.5417],  tier: 3 },
+  { name: "Dublin",          coords: [53.3498,   -6.2603],  tier: 3 },
+  { name: "Edinburgh",       coords: [55.9533,   -3.1883],  tier: 3 },
+  { name: "Bucharest",       coords: [44.4268,   26.1025],  tier: 3 },
+  { name: "Belgrade",        coords: [44.8176,   20.4569],  tier: 3 },
+  { name: "Tashkent",        coords: [41.2995,   69.2401],  tier: 3 },
+  { name: "Almaty",          coords: [43.2389,   76.8897],  tier: 3 },
+  { name: "Casablanca",      coords: [33.5731,   -7.5898],  tier: 3 },
+  { name: "Tunis",           coords: [36.8065,   10.1815],  tier: 3 },
+  { name: "Addis Ababa",     coords: [9.0320,    38.7469],  tier: 3 },
+  { name: "Accra",           coords: [5.6037,    -0.1870],  tier: 3 },
+  { name: "Dar es Salaam",   coords: [-6.7924,   39.2083],  tier: 3 },
+  { name: "Kinshasa",        coords: [-4.3217,   15.3222],  tier: 3 },
+  { name: "Doha",            coords: [25.2854,   51.5310],  tier: 3 },
+  { name: "Amman",           coords: [31.9454,   35.9284],  tier: 3 },
+  { name: "Beirut",          coords: [33.8938,   35.5018],  tier: 3 },
+  { name: "Karachi",         coords: [24.8607,   67.0011],  tier: 3 },
+  { name: "Dhaka",           coords: [23.8103,   90.4125],  tier: 3 },
+  { name: "Colombo",         coords: [6.9271,    79.8612],  tier: 3 },
+  { name: "Kathmandu",       coords: [27.7172,   85.3240],  tier: 3 },
+  { name: "Kuala Lumpur",    coords: [3.1390,   101.6869],  tier: 3 },
+  { name: "Manila",          coords: [14.5995,  120.9842],  tier: 3 },
+  { name: "Taipei",          coords: [25.0330,  121.5654],  tier: 3 },
+  { name: "Shanghai",        coords: [31.2304,  121.4737],  tier: 3 },
+  { name: "Hanoi",           coords: [21.0285,  105.8542],  tier: 3 },
+  { name: "Ho Chi Minh",     coords: [10.8231,  106.6297],  tier: 3 },
+  { name: "Perth",           coords: [-31.9505,  115.8605], tier: 3 },
+  { name: "Brisbane",        coords: [-27.4698,  153.0251], tier: 3 },
+
+  // ── East Asia (China) ──────────────────────────────────────────────────────
+  { name: "Guangzhou",       coords: [23.1291,  113.2644],  tier: 3 },
+  { name: "Shenzhen",        coords: [22.5431,  114.0579],  tier: 3 },
+  { name: "Chengdu",         coords: [30.5728,  104.0668],  tier: 3 },
+  { name: "Xi'an",           coords: [34.3416,  108.9398],  tier: 3 },
+  { name: "Hangzhou",        coords: [30.2741,  120.1551],  tier: 3 },
+  { name: "Chongqing",       coords: [29.4316,  106.9123],  tier: 3 },
+  { name: "Nanjing",         coords: [32.0603,  118.7969],  tier: 3 },
+  { name: "Harbin",          coords: [45.8038,  126.5349],  tier: 3 },
+  { name: "Qingdao",         coords: [36.0671,  120.3826],  tier: 3 },
+  { name: "Kunming",         coords: [25.0458,  102.7097],  tier: 3 },
+
+  // ── East Asia (Japan) ──────────────────────────────────────────────────────
+  { name: "Kyoto",           coords: [35.0116,  135.7681],  tier: 3 },
+  { name: "Fukuoka",         coords: [33.5904,  130.4017],  tier: 3 },
+  { name: "Sapporo",         coords: [43.0618,  141.3545],  tier: 3 },
+  { name: "Nagoya",          coords: [35.1815,  136.9066],  tier: 3 },
+  { name: "Hiroshima",       coords: [34.3853,  132.4553],  tier: 3 },
+
+  // ── East Asia (South Korea & Mongolia) ────────────────────────────────────
+  { name: "Busan",           coords: [35.1796,  129.0756],  tier: 3 },
+  { name: "Ulaanbaatar",     coords: [47.8864,  106.9057],  tier: 3 },
+
+  // ── Southeast Asia ─────────────────────────────────────────────────────────
+  { name: "Yangon",          coords: [16.8661,   96.1951],  tier: 3 },
+  { name: "Phnom Penh",      coords: [11.5564,  104.9282],  tier: 3 },
+  { name: "Chiang Mai",      coords: [18.7883,   98.9853],  tier: 3 },
+  { name: "Penang",          coords: [5.4141,   100.3288],  tier: 3 },
+  { name: "Bali",            coords: [-8.6705,  115.2126],  tier: 3 },
 ];
 
 const GEO_URL = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json";
@@ -346,8 +429,8 @@ const GEO_URL = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json"
 // ─── Map Phase ────────────────────────────────────────────────────────────────
 function MapPhase({ onConfirm }) {
   const isDarkMode = useIsDarkMode();
-  const mapBg = isDarkMode ? "#1c1c1c" : "#b8dce8";
-  const cityPingColor = isDarkMode ? "#0d9488" : "#0d6b8a";
+  const mapBg = isDarkMode ? "#0d1424" : "#b8dce8";
+  const cityPingColor = isDarkMode ? "#3b82f6" : "#0d6b8a";
 
   const [selected, setSelected] = useState(null);
   const [position, setPosition] = useState({ coordinates: [0, 20], zoom: 1.8 });
@@ -465,9 +548,9 @@ function MapPhase({ onConfirm }) {
               <Geography key={geo.rsmKey} geography={geo} onClick={() => handleCountryClick(geo)}
                 style={{
                   default: isDarkMode
-                    ? { fill: "#2e2e2e", stroke: "rgba(255,255,255,0.1)", strokeWidth: 0.4, outline: "none" }
+                    ? { fill: "#1a2640", stroke: "rgba(100,160,255,0.15)", strokeWidth: 0.4, outline: "none" }
                     : { fill: "#dff0f5", stroke: "#a8cdd8", strokeWidth: 0.4, outline: "none" },
-                  hover:   { fill: "rgba(13,148,136,0.65)", stroke: "#0d9488", strokeWidth: 0.6, outline: "none", cursor: "pointer" },
+                  hover:   { fill: "rgba(59,130,246,0.55)", stroke: "#3b82f6", strokeWidth: 0.6, outline: "none", cursor: "pointer" },
                   pressed: { fill: "#0d9488", outline: "none" },
                 }}
               />
@@ -485,7 +568,11 @@ function MapPhase({ onConfirm }) {
             </MapMarker>
           ))}
 
-          {MAJOR_CITIES.map((city) => (
+          {MAJOR_CITIES.filter((city) =>
+            city.tier === 1 ||
+            (city.tier === 2 && position.zoom >= 2.8) ||
+            (city.tier === 3 && position.zoom >= 4.5)
+          ).map((city) => (
             <MapMarker key={city.name} coordinates={[city.coords[1], city.coords[0]]}
               onClick={() => onConfirm({ name: city.name, coords: city.coords })}
               style={{ cursor: "pointer" }}
@@ -781,8 +868,6 @@ function StepBox({ children, onBack, backLabel = "← Back", onNext, onSubmit, l
 
 // ─── Wizard ───────────────────────────────────────────────────────────────────
 export default function Wizard() {
-  const nav = useNavigate();
-
   const [mapDone, setMapDone]         = useState(false);
   const [origin, setOrigin]           = useState("");
   const [destination, setDestination] = useState("");
@@ -804,9 +889,9 @@ export default function Wizard() {
   const [tripType, setTripType]   = useState("solo");
   const [groupSize, setGroupSize] = useState(1);
   const [notes, setNotes]         = useState("");
-  const [loading, setLoading]     = useState(false);
-  const [err, setErr]             = useState("");
-  const [streamChars, setStreamChars] = useState(0);
+  const { isGenerating, streamChars, genError, startGeneration, clearError } = useGeneration();
+  const loading = isGenerating;
+  const [err, setErr] = useState("");
 
   const toggleTag = (list, setList, id) =>
     setList((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
@@ -833,8 +918,9 @@ export default function Wizard() {
     else goTo(step - 1);
   };
 
-const handleSubmit = async () => {
-  setErr(""); setStreamChars(0); setLoading(true);
+const handleSubmit = () => {
+  setErr("");
+  clearError();
   const payload = {
     origin: origin.trim(),
     destination: destination.trim(),
@@ -847,39 +933,7 @@ const handleSubmit = async () => {
     transport_mode: transportMode,
     additional_notes: notes.trim() || null,
   };
-  try {
-    const res = await fetch(`${getBaseUrl()}/plan/stream`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      throw new Error(body.detail || `Server error ${res.status}`);
-    }
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let lineBuffer = "";
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      lineBuffer += decoder.decode(value, { stream: true });
-      const lines = lineBuffer.split("\n");
-      lineBuffer = lines.pop();
-      for (const line of lines) {
-        if (!line.startsWith("data: ")) continue;
-        const event = JSON.parse(line.slice(6));
-        if (event.type === "error") throw new Error(event.message);
-        if (event.type === "delta") setStreamChars((n) => n + event.text.length);
-        if (event.type === "done") {
-          nav("/plan", { state: { plan: event.result, preferences: payload } });
-          return;
-        }
-      }
-    }
-  } catch (e) {
-    setErr(e?.message || "Failed to generate trip plan.");
-  } finally { setLoading(false); }
+  startGeneration(payload);
 };
 
 
@@ -896,6 +950,23 @@ const handleSubmit = async () => {
           transition={{ duration: 0.5 }} style={{ position: "absolute", inset: 0 }}
         >
           <MapPhase onConfirm={(sel) => { setDestination(sel.name); setMapDone(true); }} />
+          {isGenerating && (
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }}
+              style={{
+                position: "absolute", inset: 0, zIndex: 2000,
+                background: "rgba(10, 16, 30, 0.82)",
+                backdropFilter: "blur(6px)",
+                display: "flex", flexDirection: "column",
+                alignItems: "center", justifyContent: "center", gap: 20,
+              }}
+            >
+              <GeneratingOverlay chars={streamChars} />
+              <div style={{ fontSize: "0.8rem", color: "rgba(180,210,255,0.5)", marginTop: -8 }}>
+                You can browse while we finish generating your trip
+              </div>
+            </motion.div>
+          )}
         </motion.div>
       </AnimatePresence>
     );
@@ -924,7 +995,7 @@ const handleSubmit = async () => {
               {step === 0 && (
                 <StepBox
                   onBack={handleBack} backLabel="← Back to Map"
-                  onNext={handleNext} loading={loading} err={err}
+                  onNext={handleNext} loading={loading} err={err || genError}
                 >
                   <StepDatesAndBudget
                     dateRange={dateRange} setDateRange={setDateRange}
@@ -942,7 +1013,7 @@ const handleSubmit = async () => {
                 </StepBox>
               )}
               {step === 1 && (
-                <StepBox onBack={handleBack} onSubmit={handleSubmit} loading={loading} err={err} isLast streamChars={streamChars}>
+                <StepBox onBack={handleBack} onSubmit={handleSubmit} loading={loading} err={err || genError} isLast streamChars={streamChars}>
                   <StepPreferencesAndDetails
                     budgetPriorities={budgetPriorities}
                     setBudgetPriorities={setBudgetPriorities}
@@ -1536,13 +1607,13 @@ function GeneratingOverlay({ chars = 0 }) {
 
       {/* Progress bar with percentage */}
       <div style={{ width: "100%", maxWidth: 260 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 10, marginBottom: 6 }}>
           <div style={{ display: "flex", gap: 4 }}>
-            {[0, 1, 2, 3, 4, 5, 6].map((i) => (
+            {Array.from({ length: 24 }, (_, i) => (
               <motion.div
                 key={i}
                 animate={{ scaleY: [0.4, 1.4, 0.4], opacity: [0.3, 1, 0.3] }}
-                transition={{ duration: 0.8, repeat: Infinity, delay: i * 0.1, ease: "easeInOut" }}
+                transition={{ duration: 0.8, repeat: Infinity, delay: i * 0.05, ease: "easeInOut" }}
                 style={{ width: 3, height: 14, borderRadius: 2, background: "var(--cal-accent)", transformOrigin: "center" }}
               />
             ))}

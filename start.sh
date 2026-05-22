@@ -16,16 +16,29 @@ if [ ! -f "$BACKEND/.env" ]; then
   echo "Created backend/.env"
 fi
 
+# Resolve venv bin path (Windows uses Scripts/, Unix uses bin/)
+if [ -d "$BACKEND/.venv/Scripts" ]; then
+  VENV_BIN="$BACKEND/.venv/Scripts"
+else
+  VENV_BIN="$BACKEND/.venv/bin"
+fi
+
 # Create Python venv if missing or broken (e.g. moved from another path)
-if [ ! -f "$BACKEND/.venv/bin/python" ] || ! "$BACKEND/.venv/bin/python" -c "" 2>/dev/null; then
+if [ ! -f "$VENV_BIN/python" ] && [ ! -f "$VENV_BIN/python.exe" ] || \
+   ! "$VENV_BIN/python" -c "" 2>/dev/null; then
   echo "Creating Python virtual environment..."
   rm -rf "$BACKEND/.venv"
-  python3 -m venv "$BACKEND/.venv"
+  python3 -m venv "$BACKEND/.venv" 2>/dev/null || python -m venv "$BACKEND/.venv"
+  if [ -d "$BACKEND/.venv/Scripts" ]; then
+    VENV_BIN="$BACKEND/.venv/Scripts"
+  else
+    VENV_BIN="$BACKEND/.venv/bin"
+  fi
 fi
 
 # Install/update backend deps
 echo "Installing backend dependencies..."
-"$BACKEND/.venv/bin/pip" install -q -r "$BACKEND/requirements.txt"
+"$VENV_BIN/pip" install -q -r "$BACKEND/requirements.txt"
 
 # Install frontend deps if missing
 if [ ! -d "$FRONTEND/node_modules" ]; then
@@ -45,7 +58,14 @@ echo "Frontend → http://localhost:5173"
 echo "Ctrl+C to stop."
 echo ""
 
-(cd "$BACKEND" && "$BACKEND/.venv/bin/uvicorn" app.main:app --reload) &
+# --reload uses multiprocessing spawn which crashes on Windows (WinError 87) in MINGW/Git Bash.
+# Disable hot-reload on Windows entirely; use it only on Mac/Linux.
+if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" || "$OSTYPE" == "win32" ]]; then
+  echo "Windows detected — starting backend without --reload (restart start.sh to pick up backend changes)"
+  (cd "$BACKEND" && "$VENV_BIN/uvicorn" app.main:app --host 0.0.0.0 --port 8000) &
+else
+  (cd "$BACKEND" && "$VENV_BIN/uvicorn" app.main:app --reload --host 0.0.0.0 --port 8000) &
+fi
 BACKEND_PID=$!
 
 npm --prefix "$FRONTEND" run dev &

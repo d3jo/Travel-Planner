@@ -61,6 +61,7 @@ Use the tabs to explore every section:
 - Python 3.10+
 - Node.js 18+
 - An [OpenAI API key](https://platform.openai.com/api-keys)
+- **Windows:** [Git Bash](https://git-scm.com/downloads) or WSL
 
 ### One-command start
 
@@ -69,6 +70,8 @@ git clone https://github.com/d3jo/Travel-Planner.git
 cd Travel-Planner
 ./start.sh
 ```
+
+Works on **macOS**, **Linux**, and **Windows** (Git Bash or WSL).
 
 On first run, the script will prompt for your OpenAI API key. Then visit:
 

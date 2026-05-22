@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-route
 import { AnimatePresence } from "framer-motion";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { AuthProvider } from "./contexts/AuthContext";
+import { GenerationProvider } from "./contexts/GenerationContext";
 import TitleBar from "./components/TitleBar";
 import PageTransition from "./components/PageTransition";
 import Wizard from "./pages/Wizard";
@@ -31,8 +32,10 @@ export default function App() {
     <BrowserRouter>
       <AuthProvider>
         <ThemeProvider>
-          <TitleBar />
-          <AnimatedRoutes />
+          <GenerationProvider>
+            <TitleBar />
+            <AnimatedRoutes />
+          </GenerationProvider>
         </ThemeProvider>
       </AuthProvider>
     </BrowserRouter>

@@ -23,21 +23,21 @@ html, body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 
-  /* Dark mode (default) */
-  --bg-app:        #242424;
-  --white:         rgba(255, 255, 255, 0.87);
-  --bg-card:       rgba(255, 255, 255, 0.06);
-  --bg-card-solid: #2e2e2e;
-  --border-col:    rgba(255, 255, 255, 0.25);
-  --bg-btn:        #1a1a1a;
+  /* Dark mode (default) — deep navy */
+  --bg-app:        #0f1623;
+  --white:         rgba(220, 235, 255, 0.9);
+  --bg-card:       rgba(255, 255, 255, 0.05);
+  --bg-card-solid: #1a2235;
+  --border-col:    rgba(100, 160, 255, 0.18);
+  --bg-btn:        #1a2235;
   --text-btn:      #ffffff;
-  --bg-input:      transparent;
-  --text-muted:    rgba(255, 255, 255, 0.45);
-  /* Calendar accent (teal) */
-  --cal-accent:    #0d9488;
-  --cal-accent-bg: rgba(13, 148, 136, 0.18);
-  --cal-accent-fg: #5eead4;
-  --cal-accent-ring: rgba(13, 148, 136, 0.2);
+  --bg-input:      rgba(255, 255, 255, 0.04);
+  --text-muted:    rgba(180, 210, 255, 0.45);
+  /* Calendar accent (blue) */
+  --cal-accent:    #3b82f6;
+  --cal-accent-bg: rgba(59, 130, 246, 0.18);
+  --cal-accent-fg: #93c5fd;
+  --cal-accent-ring: rgba(59, 130, 246, 0.25);
 
   color: var(--white);
   background-color: var(--bg-app);
@@ -197,8 +197,8 @@ body:not(.light) select {
 }
 
 body:not(.light) select option {
-  background-color: #1f2333;
-  color: #ffffff;
+  background-color: #1a2235;
+  color: #dceeff;
 }
 
 body.light select option {
