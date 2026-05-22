@@ -1526,7 +1526,7 @@ function GeneratingOverlay({ chars = 0 }) {
   ];
   const activeStep = Math.min(STEPS.length - 1, Math.floor((pct / 98) * STEPS.length));
 
-  const SIZE = 400;
+  const SIZE = 420;
   const R = SIZE / 2 - 8;
   const CIRC = 2 * Math.PI * R;
   const dashOffset = chars > 0 ? CIRC * (1 - pct / 100) : CIRC;
@@ -1534,164 +1534,118 @@ function GeneratingOverlay({ chars = 0 }) {
   return (
     <div style={{ position: "relative", width: SIZE, height: SIZE }}>
 
-
-      {/* Ambient glow bloom */}
-      <motion.div
-        animate={{ opacity: [0.35, 0.65, 0.35], scale: [1, 1.06, 1] }}
-        transition={{ duration: 3.5, repeat: Infinity, ease: "easeInOut" }}
-        style={{
-          position: "absolute", inset: -30, borderRadius: "50%",
-          background: "radial-gradient(circle, rgba(13,148,136,0.22) 0%, rgba(8,145,178,0.10) 50%, transparent 70%)",
-          filter: "blur(24px)",
-          zIndex: 0,
-          pointerEvents: "none",
-        }}
-      />
-
-      {/* Main circle body */}
+      {/* Circle body */}
       <div style={{
         position: "absolute", inset: 0, borderRadius: "50%",
-        background: "radial-gradient(circle at 38% 32%, rgba(13,148,136,0.22) 0%, rgba(8,145,178,0.10) 45%, rgba(5,12,36,0.94) 72%)",
-        backdropFilter: "blur(24px)",
-        WebkitBackdropFilter: "blur(24px)",
-        border: "1.5px solid rgba(13,148,136,0.22)",
-        boxShadow: "0 0 50px rgba(13,148,136,0.18), 0 12px 40px rgba(0,0,0,0.5), inset 0 0 60px rgba(13,148,136,0.06)",
+        background: "var(--bg-card)",
+        backdropFilter: "blur(20px)",
+        WebkitBackdropFilter: "blur(20px)",
+        border: "1.5px solid var(--border-col)",
+        boxShadow: "0 8px 32px rgba(0,0,0,0.3)",
         overflow: "hidden",
-        zIndex: 1,
+        display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+        gap: 16,
       }}>
 
-        {/* Pulsing inner rings */}
-        {[0.82, 0.65, 0.48].map((scale, i) => (
-          <motion.div
-            key={i}
-            animate={{ opacity: [0.04, 0.16, 0.04] }}
-            transition={{ duration: 3 + i * 0.8, repeat: Infinity, delay: i * 1.1, ease: "easeInOut" }}
-            style={{
-              position: "absolute",
-              inset: `${(1 - scale) * 50}%`,
-              borderRadius: "50%",
-              border: "1px solid var(--cal-accent)",
-            }}
-          />
-        ))}
-
-        {/* Starfield dots */}
-        {[...Array(12)].map((_, i) => (
-          <motion.div
-            key={i}
-            animate={{ opacity: [0, 0.6, 0], scale: [0.5, 1, 0.5] }}
-            transition={{ duration: 2.5 + (i % 4) * 0.5, repeat: Infinity, delay: i * 0.22, ease: "easeInOut" }}
-            style={{
-              position: "absolute",
-              width: 2, height: 2,
-              borderRadius: "50%",
-              background: i % 3 === 0 ? "var(--cal-accent)" : "rgba(255,255,255,0.6)",
-              left: `${15 + (i * 137.5) % 70}%`,
-              top: `${10 + (i * 97.3) % 80}%`,
-            }}
-          />
-        ))}
-
-        {/* Center content */}
-        <div style={{
-          position: "absolute", inset: 0,
-          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-          gap: 10, padding: "0 36px",
-        }}>
-
         {/* Robot + orbiting dots */}
-        <div style={{ position: "relative", width: 96, height: 96, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ position: "relative", width: 120, height: 120, display: "flex", alignItems: "center", justifyContent: "center" }}>
           {[0, 1, 2, 3].map((i) => (
             <motion.div
               key={i}
               animate={{ rotate: 360 }}
-              transition={{ duration: 3.5 + i * 0.8, repeat: Infinity, ease: "linear", delay: i * 0.5 }}
+              transition={{ duration: 3 + i * 0.8, repeat: Infinity, ease: "linear", delay: i * 0.4 }}
               style={{ position: "absolute", inset: 0, display: "flex", alignItems: "flex-start", justifyContent: "center" }}
             >
               <motion.div
-                animate={{ scale: [0.6, 1.3, 0.6], opacity: [0.3, 1, 0.3] }}
-                transition={{ duration: 1.8, repeat: Infinity, delay: i * 0.35 }}
+                animate={{ scale: [0.7, 1.2, 0.7], opacity: [0.4, 1, 0.4] }}
+                transition={{ duration: 1.5, repeat: Infinity, delay: i * 0.3 }}
                 style={{
-                  width: i % 2 === 0 ? 6 : 5, height: i % 2 === 0 ? 6 : 5,
-                  borderRadius: "50%", marginTop: 4 + i * 5,
-                  background: i % 2 === 0 ? "var(--cal-accent)" : "rgba(8,145,178,0.8)",
-                  boxShadow: i % 2 === 0 ? "0 0 6px rgba(13,148,136,0.8)" : "none",
+                  width: 8, height: 8, borderRadius: "50%", marginTop: i * 6,
+                  background: i % 2 === 0 ? "var(--cal-accent)" : "rgba(255,255,255,0.4)",
                 }}
               />
             </motion.div>
           ))}
-
           <motion.div
-            animate={{ y: [0, -7, 0], rotate: [0, -4, 4, 0] }}
-            transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
-            style={{ fontSize: "3rem", lineHeight: 1, filter: "drop-shadow(0 0 18px rgba(13,148,136,0.75))", zIndex: 1 }}
-        >🤖</motion.div>
-          </div>
+            animate={{ scale: [1, 1.18, 1], opacity: [0.15, 0.35, 0.15] }}
+            transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+            style={{ position: "absolute", inset: 10, borderRadius: "50%", border: "2px solid var(--cal-accent)" }}
+          />
+          <motion.div
+            animate={{ y: [0, -8, 0], rotate: [0, -3, 3, 0] }}
+            transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
+            style={{ fontSize: "4rem", lineHeight: 1, filter: "drop-shadow(0 0 16px rgba(13,148,136,0.6))", zIndex: 1 }}
+          >🤖</motion.div>
+        </div>
 
-          {/* Rotating message */}
-          <div style={{ height: 34, display: "flex", alignItems: "center", overflow: "hidden", width: "100%" }}>
-            <AnimatePresence mode="wait">
+        {/* Rotating message */}
+        <div style={{ height: 24, display: "flex", alignItems: "center", overflow: "hidden" }}>
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={msgIdx}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.3 }}
+              style={{ fontSize: "0.88rem", color: "var(--white)", fontWeight: 600, textAlign: "center", whiteSpace: "nowrap" }}
+            >
+              {msgs[msgIdx]}
+            </motion.div>
+          </AnimatePresence>
+        </div>
+
+        {/* Step indicators */}
+        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          {STEPS.map((s, i) => {
+            const done = i < activeStep;
+            const active = i === activeStep;
+            return (
               <motion.div
-                key={msgIdx}
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -6 }}
-                transition={{ duration: 0.3 }}
-                style={{ fontSize: "0.72rem", color: "rgba(255,255,255,0.82)", fontWeight: 600, textAlign: "center", lineHeight: 1.4, width: "100%" }}
+                key={s.label}
+                animate={active ? { scale: [1, 1.15, 1] } : {}}
+                transition={{ duration: 1, repeat: Infinity }}
+                style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, opacity: done ? 1 : active ? 1 : 0.3 }}
               >
-                {msgs[msgIdx]}
+                <div style={{ fontSize: "1.1rem", filter: active ? "drop-shadow(0 0 6px rgba(13,148,136,0.8))" : "none" }}>{s.icon}</div>
+                <div style={{ fontSize: "0.6rem", fontWeight: 700, color: done ? "var(--cal-accent)" : active ? "var(--white)" : "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                  {done ? "✓" : s.label}
+                </div>
               </motion.div>
-            </AnimatePresence>
-          </div>
+            );
+          })}
+        </div>
 
-          {/* Step dots */}
-          <div style={{ display: "flex", gap: 7, alignItems: "center" }}>
-            {STEPS.map((s, i) => {
-              const done = i < activeStep;
-              const active = i === activeStep;
-              return (
-                <motion.div
-                  key={s.label}
-                  animate={active ? { scale: [1, 1.25, 1] } : {}}
-                  transition={{ duration: 1.1, repeat: Infinity }}
-                  title={s.label}
-                  style={{
-                    width: 30, height: 30, borderRadius: "50%",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    fontSize: done ? "0.6rem" : "0.95rem",
-                    background: done ? "rgba(13,148,136,0.35)" : active ? "rgba(13,148,136,0.18)" : "rgba(255,255,255,0.05)",
-                    border: `1.5px solid ${done ? "rgba(13,148,136,0.8)" : active ? "rgba(13,148,136,0.55)" : "rgba(255,255,255,0.1)"}`,
-                    boxShadow: active ? "0 0 12px rgba(13,148,136,0.5)" : "none",
-                    opacity: done || active ? 1 : 0.3,
-                    color: done ? "#2dd4bf" : "white",
-                    fontWeight: 800,
-                    transition: "background 0.4s, border 0.4s, opacity 0.4s",
-                  }}
-                >
-                  {done ? "✓" : s.icon}
-                </motion.div>
-              );
-            })}
+        {/* Wave bars + percentage */}
+        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 10 }}>
+          <div style={{ display: "flex", gap: 4 }}>
+            {Array.from({ length: 20 }, (_, i) => (
+              <motion.div
+                key={i}
+                animate={{ scaleY: [0.4, 1.4, 0.4], opacity: [0.3, 1, 0.3] }}
+                transition={{ duration: 0.8, repeat: Infinity, delay: i * 0.05, ease: "easeInOut" }}
+                style={{ width: 3, height: 14, borderRadius: 2, background: "var(--cal-accent)", transformOrigin: "center" }}
+              />
+            ))}
           </div>
-
-          {/* Percentage counter */}
-          <motion.div
+          <motion.span
             key={pct}
-            initial={{ opacity: 0, scale: 0.75 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.3 }}
-            style={{
-              fontSize: "1.5rem", fontWeight: 800,
-              fontFamily: '"Pixelify Sans", monospace',
-              color: "var(--cal-accent)",
-              textShadow: "0 0 22px rgba(13,148,136,0.65)",
-              letterSpacing: "0.02em",
-            }}
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            style={{ fontSize: "0.82rem", color: "var(--cal-accent)", fontWeight: 800, fontFamily: '"Pixelify Sans", sans-serif' }}
           >
             {chars > 0 ? `${pct}%` : "—"}
-          </motion.div>
-
+          </motion.span>
         </div>
+
+        {/* Progress bar */}
+        <div style={{ width: 240, height: 5, borderRadius: 3, background: "rgba(255,255,255,0.08)", overflow: "hidden" }}>
+          <motion.div
+            animate={{ width: chars > 0 ? `${pct}%` : "0%" }}
+            transition={{ ease: "easeOut", duration: 0.4 }}
+            style={{ height: "100%", borderRadius: 3, background: "linear-gradient(90deg, #0d9488, #0891b2)", boxShadow: "0 0 8px rgba(13,148,136,0.6)" }}
+          />
+        </div>
+
       </div>
 
       {/* SVG arc progress ring */}
@@ -1701,30 +1655,18 @@ function GeneratingOverlay({ chars = 0 }) {
         style={{ position: "absolute", inset: 0, zIndex: 3, transform: "rotate(-90deg)", pointerEvents: "none" }}
       >
         <defs>
-          <linearGradient id="arcGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <linearGradient id="arcGrad" x1="0%" y1="0%" x2="100%" y2="0%">
             <stop offset="0%" stopColor="#0d9488" />
-            <stop offset="50%" stopColor="#0891b2" />
-            <stop offset="100%" stopColor="#6366f1" />
+            <stop offset="100%" stopColor="#0891b2" />
           </linearGradient>
-          <filter id="arcGlow" x="-20%" y="-20%" width="140%" height="140%">
-            <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur" />
-            <feMerge>
-              <feMergeNode in="blur" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
         </defs>
-        <circle cx={SIZE / 2} cy={SIZE / 2} r={R} fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth={3} />
+        <circle cx={SIZE / 2} cy={SIZE / 2} r={R} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={3} />
         <motion.circle
           cx={SIZE / 2} cy={SIZE / 2} r={R}
-          fill="none"
-          stroke="url(#arcGrad)"
-          strokeWidth={5}
-          strokeLinecap="round"
+          fill="none" stroke="url(#arcGrad)" strokeWidth={4} strokeLinecap="round"
           strokeDasharray={CIRC}
           animate={{ strokeDashoffset: dashOffset }}
           transition={{ ease: "easeOut", duration: 0.6 }}
-          filter="url(#arcGlow)"
         />
       </svg>
 
