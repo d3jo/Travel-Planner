@@ -194,7 +194,7 @@ export default function TripPlan() {
               {activeTab === "Hotels"      && <TabHotels hotels={plan.hotels || []} currency={prefs?.currency} />}
               {activeTab === "Experiences"  && <TabActivities activities={plan.activities || []} currency={prefs?.currency} />}
               {activeTab === "Food"        && <TabFood foodSpots={plan.food_spots || []} destination={prefs?.destination} />}
-              {activeTab === "Transportation" && <TabTransportation options={plan.transportation_options || []} currency={prefs?.currency} origin={prefs?.origin} destination={prefs?.destination} overrideNote={plan._transport_override} />}
+              {activeTab === "Transportation" && <TabTransportation options={plan.transportation_options || []} currency={prefs?.currency} origin={prefs?.origin} destination={prefs?.destination} overrideNote={plan._transport_override} groupSize={prefs?.group_size ?? 1} />}
               {activeTab === "Itinerary"   && <TabItinerary itinerary={plan.itinerary || []} currency={prefs?.currency} />}
               {activeTab === "Weekly Plan" && <TabWeeklyPlan weeklyPlan={plan.weekly_plan || []} destination={prefs?.destination} />}
               {activeTab === "Budget"      && <TabBudget budget={plan.budget_breakdown} prefs={prefs} />}
@@ -487,7 +487,7 @@ function TabFood({ foodSpots, destination }) {
 
 
 // ─── Transportation Tab ───────────────────────────────────────────────────────
-function TabTransportation({ options, currency, origin, destination, overrideNote }) {
+function TabTransportation({ options, currency, origin, destination, overrideNote, groupSize = 1 }) {
   if (!options.length) return <EmptyState>No transportation options available.</EmptyState>;
   return (
     <div style={styles.tabContent}>
@@ -520,9 +520,9 @@ function TabTransportation({ options, currency, origin, destination, overrideNot
         const pe = opt.priceEstimate;
         const priceCurrency = pe?.currency || currency;
         const priceDisplay = pe
-          ? `${priceCurrency} ${pe.min?.toLocaleString()} – ${pe.max?.toLocaleString()}`
+          ? `${priceCurrency} ${Math.round(pe.min / groupSize).toLocaleString()} – ${Math.round(pe.max / groupSize).toLocaleString()}`
           : opt.estimated_cost_per_group != null
-            ? `${currency} ${Number(opt.estimated_cost_per_group).toLocaleString()}`
+            ? `${currency} ${Math.round(Number(opt.estimated_cost_per_group) / groupSize).toLocaleString()}`
             : null;
         const confidence = pe?.confidence;
         const confidenceColor = confidence === "high" ? "#4ade80"
@@ -812,7 +812,7 @@ function budgetMathNote(key, value, currency, nights, groupSize) {
     case "food":
       return `${currency} ${fmt(perPerson / n)} /person/day × ${g} traveler${g !== 1 ? "s" : ""} × ${n} days`;
     case "transport":
-      return `${currency} ${fmt(perPerson)} /person (flights per person × ${g} traveler${g !== 1 ? "s" : ""} + local)`;
+      return `${currency} ${fmt(perPerson)} /person (group flight total ÷ ${g} traveler${g !== 1 ? "s" : ""} + local)`;
     case "shopping":
       return `${currency} ${fmt(perPerson / n)} /person/day × ${g} traveler${g !== 1 ? "s" : ""} × ${n} nights`;
     default: return null;
@@ -823,13 +823,28 @@ function BudgetRow({ item, total, currency, nights, groupSize, perPersonMode, tr
   const [hovered, setHovered] = useState(false);
   const pct = Math.round((item.value / total) * 100);
   const perPersonVal = Math.round(item.value / groupSize);
-  const primaryVal = perPersonMode ? perPersonVal : item.value;
-  const note = budgetMathNote(item.key, item.value, currency, nights, groupSize);
+  // transport uses pre-divided displayValue; other items divide here
+  const primaryVal = item.displayValue != null ? item.displayValue : (perPersonMode ? perPersonVal : item.value);
+  const mathNote = budgetMathNote(item.key, item.value, currency, nights, groupSize);
 
   const hasRange = item.key === "transport" && item.range?.min != null && item.range?.max != null && item.range.min !== item.range.max;
-  const dispRangeMin = hasRange ? (perPersonMode ? Math.round(item.range.min / groupSize) : Math.round(item.range.min)) : null;
-  const dispRangeMax = hasRange ? (perPersonMode ? Math.round(item.range.max / groupSize) : Math.round(item.range.max)) : null;
+  // range and breakdown are already pre-divided to the correct mode in TabBudget
+  const dispRangeMin = hasRange ? item.range.min : null;
+  const dispRangeMax = hasRange ? item.range.max : null;
   const bd = item.breakdown;
+
+  // For transport, build tooltip from pre-processed per-person breakdown values
+  const transportNote = item.key === "transport" && bd?.international
+    ? (() => {
+        const flMin = bd.international.min;
+        const flMax = bd.international.max;
+        const loc = bd.local || 0;
+        const suffix = perPersonMode ? " /person" : " total";
+        return loc > 0
+          ? `${currency} ${flMin.toLocaleString()}–${flMax.toLocaleString()} flights + ${currency} ${loc.toLocaleString()} local${suffix}`
+          : `${currency} ${flMin.toLocaleString()}–${flMax.toLocaleString()} flights${suffix}`;
+      })()
+    : null;
 
   return (
     <div
@@ -840,7 +855,7 @@ function BudgetRow({ item, total, currency, nights, groupSize, perPersonMode, tr
       <div style={styles.budgetRowLabel}>
         <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
           {item.label}
-          {note && <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", opacity: 0.6 }}>ⓘ</span>}
+          {(transportNote || mathNote) && <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", opacity: 0.6 }}>ⓘ</span>}
         </span>
         <div style={{ textAlign: "right" }}>
           {hasRange ? (
@@ -869,7 +884,7 @@ function BudgetRow({ item, total, currency, nights, groupSize, perPersonMode, tr
         />
       </div>
       <div style={styles.barPct}>{pct}%</div>
-      {hovered && note && (
+      {hovered && (transportNote || mathNote) && (
         <div style={{
           position: "absolute", left: 0, top: "100%", zIndex: 20,
           background: "var(--bg-card)", border: "1px solid var(--border-col)",
@@ -879,7 +894,7 @@ function BudgetRow({ item, total, currency, nights, groupSize, perPersonMode, tr
           boxShadow: "0 6px 20px rgba(0,0,0,0.35)",
           pointerEvents: "none",
         }}>
-          {note}
+          {transportNote || mathNote}
         </div>
       )}
       {hasRange && bd && (
@@ -892,13 +907,13 @@ function BudgetRow({ item, total, currency, nights, groupSize, perPersonMode, tr
                  transportMode === "bus_train" ? "🚌 Bus / Train" :
                  "✈️ Flights"}{perPersonMode ? " (per person)" : " (total)"}
               </span>
-              <span>{currency} {Math.round(perPersonMode ? bd.international.min / groupSize : bd.international.min).toLocaleString()} – {Math.round(perPersonMode ? bd.international.max / groupSize : bd.international.max).toLocaleString()}</span>
+              <span>{currency} {bd.international.min.toLocaleString()} – {bd.international.max.toLocaleString()}</span>
             </div>
           )}
           {bd.local > 0 && (
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.78rem", color: "var(--text-muted)" }}>
               <span>🚌 Local transport</span>
-              <span>{currency} {Math.round(perPersonMode ? bd.local / groupSize : bd.local).toLocaleString()}</span>
+              <span>{currency} {bd.local.toLocaleString()}</span>
             </div>
           )}
           {bd.international?.note && (
@@ -931,17 +946,27 @@ function TabBudget({ budget, prefs }) {
   const perPersonMode = prefs?.budget_type === "per_person";
 
   // Recompute transport total/range from breakdown.
-  // international.min/max = TOTAL cost for the group (LLM outputs group totals despite per-person label).
-  // Do NOT multiply by groupSize — the LLM already accounts for group size.
-  let transportTotal = budget.transport_total || 0;
-  let transportRange = budget.transport_range;
+  // international.min/max = TOTAL cost for the group. local = group total.
+  let transportTotal = budget.transport_total || 0;  // always group total, used for grandTotal %
+  let transportRange = null;
+  let transportBreakdown = null;
   const tbd = budget.transport_breakdown;
   if (tbd?.international?.min != null && tbd?.international?.max != null) {
     const local = tbd.local || 0;
-    const corrMin = Math.round(tbd.international.min + local);
-    const corrMax = Math.round(tbd.international.max + local);
+    const groupMin = Math.round(tbd.international.min + local);
+    const groupMax = Math.round(tbd.international.max + local);
     transportTotal = Math.round((tbd.international.min + tbd.international.max) / 2 + local);
-    transportRange = { min: corrMin, max: corrMax };
+    // Pre-divide to correct display mode so BudgetRow doesn't need to
+    const scale = perPersonMode ? 1 / groupSize : 1;
+    transportRange = { min: Math.round(groupMin * scale), max: Math.round(groupMax * scale) };
+    transportBreakdown = {
+      international: {
+        min: Math.round(tbd.international.min * scale),
+        max: Math.round(tbd.international.max * scale),
+        note: tbd.international.note,
+      },
+      local: Math.round(local * scale),
+    };
   }
 
   const grandTotal = (budget.hotels_total || 0) + (budget.activities_total || 0) +
@@ -969,7 +994,8 @@ function TabBudget({ budget, prefs }) {
     { key: "activities", label: "🎭 Experiences & Attractions", value: budget.activities_total, color: "#8b5cf6" },
     { key: "food",     label: "🍽️ Food",            value: budget.food_total,          color: "#f59e0b" },
     { key: "transport",label: "🚗 Transportation",   value: transportTotal,             color: "#3b82f6",
-      range: transportRange, breakdown: budget.transport_breakdown },
+      displayValue: perPersonMode ? Math.round(transportTotal / groupSize) : transportTotal,
+      range: transportRange, breakdown: transportBreakdown },
     { key: "shopping", label: "🛍️ Shopping, Miscellaneous & Incidentals", value: budget.shopping_misc_total, color: "#ec4899" },
   ].filter((i) => i.value > 0);
 
@@ -1131,13 +1157,16 @@ function TabBudget({ budget, prefs }) {
             );
           })()}
           {(() => {
+            const gs = prefs.group_size ?? 1;
             const enteredTotal = prefs.budget_type === "per_person"
-              ? prefs.budget * (prefs.group_size ?? 1)
+              ? prefs.budget * gs
               : prefs.budget;
             const diff = enteredTotal - grandTotal;
             const pct = enteredTotal > 0 ? Math.abs(diff) / enteredTotal : 0;
             if (pct < 0.08) return null;
             const isUnder = diff > 0;
+            const dispDiff = perPersonMode ? Math.round(Math.abs(diff) / gs) : Math.round(Math.abs(diff));
+            const diffLabel = perPersonMode ? `${prefs.currency} ${dispDiff.toLocaleString()}/person` : `${prefs.currency} ${dispDiff.toLocaleString()}`;
 
             const categoryNames = { hotels: "Hotels", activities: "Activities", food: "Food & Dining", transport: "Transportation", shopping: "Shopping & Misc" };
             const userPriorities = new Set((prefs?.budget_priorities || []).map(p => p.toLowerCase()));
@@ -1158,12 +1187,12 @@ function TabBudget({ budget, prefs }) {
                 {isUnder ? (
                   <>
                     <span style={{ fontWeight: 700, color: "#38bdf8" }}>ℹ️ Budget not fully used: </span>
-                    You have <strong>{prefs.currency} {Math.round(diff).toLocaleString()}</strong> remaining. Consider allocating more toward <strong>{upgradeTargets}</strong> — there's room to upgrade.
+                    You have <strong>{diffLabel}</strong> remaining. Consider allocating more toward <strong>{upgradeTargets}</strong> — there's room to upgrade.
                   </>
                 ) : (
                   <>
                     <span style={{ fontWeight: 700, color: "#f87171" }}>⚠️ Over your budget: </span>
-                    This plan exceeds your budget by <strong>{prefs.currency} {Math.round(Math.abs(diff)).toLocaleString()}</strong>. Consider trimming <strong>{upgradeTargets}</strong> to stay within budget.
+                    This plan exceeds your budget by <strong>{diffLabel}</strong>. Consider trimming <strong>{upgradeTargets}</strong> to stay within budget.
                   </>
                 )}
               </div>

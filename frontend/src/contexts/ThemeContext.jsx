@@ -1,9 +1,9 @@
 import { createContext, useContext, useEffect, useState } from "react";
 
-const ThemeContext = createContext({ isDark: true, toggle: () => {} });
+const ThemeContext = createContext({ isDark: false, toggle: () => {} });
 
 export function ThemeProvider({ children }) {
-  const [isDark, setIsDark] = useState(true);
+  const [isDark, setIsDark] = useState(false);
 
   useEffect(() => {
     document.body.classList.toggle("light", !isDark);
