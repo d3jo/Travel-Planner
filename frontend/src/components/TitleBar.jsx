@@ -3,11 +3,13 @@ import shrinkIcon from "../assets/shrink-icon.png";
 import { useTheme } from "../contexts/ThemeContext";
 import { useAuth } from "../contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
+import { useIsMobile } from "../hooks/useIsMobile";
 
 export default function TitleBar() {
   const { isDark, toggle } = useTheme();
   const { isLoggedIn, user } = useAuth();
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
   const hasElectronWindowControls = typeof window !== "undefined" && Boolean(window.electron);
 
   const handleMinimize = () => { if (hasElectronWindowControls) window.electron.minimize(); };
@@ -26,10 +28,17 @@ export default function TitleBar() {
             type="button"
             onClick={toggle}
             title={isDark ? "Switch to light mode" : "Switch to dark mode"}
-            style={styles.themeBtn}
+            style={{
+              ...styles.themeBtn,
+              padding: isMobile ? "6px 10px" : "6px 14px",
+              gap: isMobile ? 4 : 6,
+              minHeight: 36,
+            }}
           >
             {isDark ? "☀️" : "🌙"}
-            <span style={{ fontSize: "0.82rem", fontWeight: 600 }}>{isDark ? "Light" : "Dark"}</span>
+            {!isMobile && (
+              <span style={{ fontSize: "0.82rem", fontWeight: 600 }}>{isDark ? "Light" : "Dark"}</span>
+            )}
           </button>
         </div>
 
@@ -39,11 +48,15 @@ export default function TitleBar() {
         {/* Right: auth + window controls */}
         <div style={{ ...noDrag, display: "flex", alignItems: "center", gap: 8, paddingRight: 8 }}>
           {isLoggedIn ? (
-            <button type="button" onClick={() => navigate("/my-trips")} style={styles.authBtn} title="My Trips">
+            <button type="button" onClick={() => navigate("/my-trips")} style={{ ...styles.authBtn, width: 36, height: 36 }} title="My Trips">
               {user?.username?.slice(0, 1).toUpperCase() || "U"}
             </button>
           ) : (
-            <button type="button" onClick={() => navigate("/auth")} style={styles.authBtnOutline}>
+            <button type="button" onClick={() => navigate("/auth")} style={{
+              ...styles.authBtnOutline,
+              padding: isMobile ? "6px 14px" : "6px 18px",
+              fontSize: isMobile ? 13 : 14,
+            }}>
               Sign In
             </button>
           )}

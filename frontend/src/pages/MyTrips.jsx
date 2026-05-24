@@ -75,7 +75,7 @@ export default function MyTrips() {
     <div style={{
       minHeight: "100vh",
       background: "var(--bg-app)",
-      padding: "80px 24px 40px",
+      padding: "76px clamp(16px, 4vw, 24px) max(env(safe-area-inset-bottom, 0px) + 24px, 40px)",
     }}>
       <div style={{ maxWidth: 720, margin: "0 auto" }}>
         {/* Header */}
@@ -96,18 +96,19 @@ export default function MyTrips() {
           >
             ← Back
           </button>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
             <div>
-              <h1 style={{ margin: 0, fontSize: 28, fontWeight: 800, color: "var(--white)", fontFamily: '"Pixelify Sans", sans-serif' }}>My Trips</h1>
+              <h1 style={{ margin: 0, fontSize: "clamp(22px, 6vw, 28px)", fontWeight: 800, color: "var(--white)", fontFamily: '"Pixelify Sans", sans-serif' }}>My Trips</h1>
               <div style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 4 }}>
                 Saved by {user?.username}
               </div>
             </div>
-            <div style={{ display: "flex", gap: 10 }}>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
               <button
                 onClick={() => navigate("/")}
                 style={{
-                  padding: "8px 18px",
+                  padding: "10px 18px",
+                  minHeight: 44,
                   borderRadius: 10,
                   border: "1px solid var(--border-col)",
                   background: "var(--bg-card)",
@@ -122,7 +123,8 @@ export default function MyTrips() {
               <button
                 onClick={logout}
                 style={{
-                  padding: "8px 18px",
+                  padding: "10px 18px",
+                  minHeight: 44,
                   borderRadius: 10,
                   border: "1px solid var(--border-col)",
                   background: "transparent",
@@ -217,9 +219,14 @@ export default function MyTrips() {
                         cursor: "pointer",
                         color: "var(--text-muted)",
                         fontSize: 18,
-                        padding: "2px 6px",
+                        padding: "6px 10px",
                         borderRadius: 6,
                         lineHeight: 1,
+                        minWidth: 44,
+                        minHeight: 44,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
                       }}
                       title="Delete trip"
                     >

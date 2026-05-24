@@ -267,3 +267,46 @@ button:focus-visible {
 }
 
 /* Removed prefers-color-scheme override — theme is controlled manually via body.light class */
+
+/* ─── Responsive layout grids ─────────────────────────────────────────────── */
+/* Used to replace multi-column inline grid styles that break on mobile.      */
+/* Columns collapse to a single stack below 640 px.                            */
+
+.rsp-3col {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.8fr) minmax(0, 1.2fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.rsp-2col {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+@media (max-width: 639px) {
+  .rsp-3col {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .rsp-2col {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+}
+
+/* ─── Touch target baseline ───────────────────────────────────────────────── */
+/* Buttons defined with small padding get a minimum 44 px tap height on mobile */
+@media (max-width: 639px) {
+  button {
+    min-height: 44px;
+  }
+}
+
+/* ─── Safe-area bottom inset support ──────────────────────────────────────── */
+/* Pages that need bottom breathing room on iOS notched devices               */
+.safe-pb {
+  padding-bottom: max(40px, env(safe-area-inset-bottom, 40px));
+}

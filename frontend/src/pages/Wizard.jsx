@@ -7,6 +7,7 @@ import "react-day-picker/dist/style.css";
 import api from "../api";
 import { useIsDarkMode, useTheme } from "../contexts/ThemeContext";
 import ThemeToggle from "../components/ThemeToggle";
+import { useIsMobile } from "../hooks/useIsMobile";
 
 // ─── City name normalizer ─────────────────────────────────────────────────────
 function formatCityFromNominatim(item) {
@@ -67,6 +68,25 @@ function normalizeCountryName(name = "") {
     "U.S.A.": "United States of America",
   };
   return aliases[cleaned] || cleaned;
+}
+
+function haversineKm([lat1, lon1], [lat2, lon2]) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.asin(Math.sqrt(a));
+}
+
+function permutations(arr) {
+  if (arr.length <= 1) return [arr];
+  const result = [];
+  for (let i = 0; i < arr.length; i++) {
+    const rest = [...arr.slice(0, i), ...arr.slice(i + 1)];
+    for (const p of permutations(rest)) result.push([arr[i], ...p]);
+  }
+  return result;
 }
 
 function cityPhotoUrls(cityName, countryName) {
@@ -424,13 +444,27 @@ const MAJOR_CITIES = [
   { name: "Bali",            coords: [-8.6705,  115.2126],  tier: 3 },
 ];
 
-const GEO_URL = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json";
+const GEO_URL = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-50m.json";
 
 // ─── Map Phase ────────────────────────────────────────────────────────────────
-function MapPhase({ onConfirm }) {
+function MapPhase({ onConfirm, initialIsMultiDest = false, initialMultiDests = [] }) {
   const isDarkMode = useIsDarkMode();
+  const isMobile = useIsMobile();
   const mapBg = isDarkMode ? "#0d1424" : "#b8dce8";
   const cityPingColor = isDarkMode ? "#3b82f6" : "#0d6b8a";
+
+  const [isMultiDest, setIsMultiDest] = useState(initialIsMultiDest);
+  const [multiDests, setMultiDests] = useState(initialMultiDests);
+  const [multiDestHint, setMultiDestHint] = useState("");
+
+  const toggleMultiDestItem = useCallback((dest) => {
+    setMultiDests((prev) => {
+      const exists = prev.find((d) => d.name === dest.name);
+      if (exists) return prev.filter((d) => d.name !== dest.name);
+      if (prev.length >= 5) return prev;
+      return [...prev, dest];
+    });
+  }, []);
 
   const [selected, setSelected] = useState(null);
   const [position, setPosition] = useState({ coordinates: [0, 20], zoom: 1.8 });
@@ -440,6 +474,8 @@ function MapPhase({ onConfirm }) {
   const [cityRecommendations, setCityRecommendations] = useState(EMPTY_RECOMMENDATIONS);
   const [recommendationLoading, setRecommendationLoading] = useState(false);
   const [recommendationError, setRecommendationError] = useState("");
+  const [hoveredCountry, setHoveredCountry] = useState(null);
+  const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
 
   const constrain = (pos) => {
     const vw = 360 / Math.max(1, pos.zoom);
@@ -449,7 +485,7 @@ function MapPhase({ onConfirm }) {
         Math.max(-180 + vw / 2, Math.min(180 - vw / 2, pos.coordinates[0])),
         Math.max(-85 + vh / 2, Math.min(85 - vh / 2, pos.coordinates[1])),
       ],
-      zoom: Math.max(1.8, Math.min(12, pos.zoom)),
+      zoom: Math.max(1.8, Math.min(40, pos.zoom)),
     };
   };
 
@@ -461,31 +497,55 @@ function MapPhase({ onConfirm }) {
         { headers: { "Accept-Language": "en" } }
       );
       const data = await res.json();
-      setSelected({ name, coords: data[0] ? [parseFloat(data[0].lat), parseFloat(data[0].lon)] : [0, 0], type: "country", countryName: name });
-      setRecommendationCountry(normalizeCountryName(name));
-      setShowRecommendations(false);
-      setFocusedRecommendation(null);
-      setCityRecommendations([]);
-      setRecommendationError("");
+      const dest = { name, coords: data[0] ? [parseFloat(data[0].lat), parseFloat(data[0].lon)] : [0, 0], type: "country", countryName: name };
+      if (isMultiDest) {
+        setMultiDestHint(`Pick a specific city in ${name} — use the search bar or click a city pin`);
+        setTimeout(() => setMultiDestHint(""), 3500);
+      } else {
+        setSelected(dest);
+        setRecommendationCountry(normalizeCountryName(name));
+        setShowRecommendations(false);
+        setFocusedRecommendation(null);
+        setCityRecommendations([]);
+        setRecommendationError("");
+      }
     } catch {
-      setSelected({ name, coords: [0, 0], type: "country", countryName: name });
-      setRecommendationCountry(normalizeCountryName(name));
-      setShowRecommendations(false);
-      setFocusedRecommendation(null);
-      setCityRecommendations([]);
-      setRecommendationError("");
+      if (isMultiDest) {
+        setMultiDestHint(`Pick a specific city — use the search bar or click a city pin`);
+        setTimeout(() => setMultiDestHint(""), 3500);
+      } else {
+        setSelected({ name, coords: [0, 0], type: "country", countryName: name });
+        setRecommendationCountry(normalizeCountryName(name));
+        setShowRecommendations(false);
+        setFocusedRecommendation(null);
+        setCityRecommendations([]);
+        setRecommendationError("");
+      }
     }
-  }, []);
+  }, [isMultiDest, toggleMultiDestItem]);
 
   const handleSearchSelect = useCallback(({ name, coords, type, countryName }) => {
-    setSelected({ name, coords, type, countryName });
-    setRecommendationCountry(type === "country" ? normalizeCountryName(countryName || "") : null);
-    setShowRecommendations(false);
-    setFocusedRecommendation(null);
-    setCityRecommendations([]);
-    setRecommendationError("");
-    setPosition(constrain({ coordinates: [coords[1], coords[0]], zoom: 5 }));
-  }, []);
+    const shortName = type === "city" ? name.split(",")[0].trim() : name;
+    const dest = { name: shortName, coords, type, countryName };
+    if (isMultiDest) {
+      if (type === "country") {
+        setMultiDestHint(`Pick a specific city in ${shortName} — use the search bar or click a city pin`);
+        setTimeout(() => setMultiDestHint(""), 3500);
+        setPosition(constrain({ coordinates: [coords[1], coords[0]], zoom: 5 }));
+        return;
+      }
+      toggleMultiDestItem(dest);
+      setPosition(constrain({ coordinates: [coords[1], coords[0]], zoom: 5 }));
+    } else {
+      setSelected(dest);
+      setRecommendationCountry(type === "country" ? normalizeCountryName(countryName || "") : null);
+      setShowRecommendations(false);
+      setFocusedRecommendation(null);
+      setCityRecommendations([]);
+      setRecommendationError("");
+      setPosition(constrain({ coordinates: [coords[1], coords[0]], zoom: 5 }));
+    }
+  }, [isMultiDest, toggleMultiDestItem]);
 
 
 
@@ -522,8 +582,8 @@ function MapPhase({ onConfirm }) {
 
 
 
-  const handleZoom = (delta) =>
-    setPosition((prev) => constrain({ ...prev, zoom: prev.zoom + delta }));
+  const handleZoom = (factor) =>
+    setPosition((prev) => constrain({ ...prev, zoom: prev.zoom * factor }));
 
   const mapRef = useRef(null);
   useEffect(() => {
@@ -534,23 +594,35 @@ function MapPhase({ onConfirm }) {
     return () => el.removeEventListener("wheel", handler);
   }, []);
 
+  const handleMapMouseMove = useCallback((e) => {
+    if (!mapRef.current) return;
+    const rect = mapRef.current.getBoundingClientRect();
+    setTooltipPos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+  }, []);
+
   return (
-    <div ref={mapRef} style={{ ...mapStyles.wrap, background: mapBg }}>
+    <div ref={mapRef} style={{ ...mapStyles.wrap, background: mapBg }}
+      onMouseMove={handleMapMouseMove}
+      onMouseLeave={() => setHoveredCountry(null)}
+    >
       <ComposableMap projection="geoMercator" projectionConfig={{ scale: 145 }}
-        style={{ width: "100%", height: "100%", background: mapBg }}
+        style={{ width: "100%", height: "100%", background: mapBg, shapeRendering: "geometricPrecision" }}
       >
         <ZoomableGroup center={position.coordinates} zoom={position.zoom}
-          onMoveEnd={(pos) => setPosition(constrain(pos))} minZoom={1.8} maxZoom={12}
+          onMoveEnd={(pos) => setPosition(constrain(pos))} minZoom={1.8} maxZoom={40}
           filterZoomEvent={(e) => !e.button}
         >
           <Geographies geography={GEO_URL}>
             {({ geographies }) => geographies.map((geo) => (
-              <Geography key={geo.rsmKey} geography={geo} onClick={() => handleCountryClick(geo)}
+              <Geography key={geo.rsmKey} geography={geo}
+                onClick={() => handleCountryClick(geo)}
+                onMouseEnter={() => setHoveredCountry(geo.properties.name || null)}
+                onMouseLeave={() => setHoveredCountry(null)}
                 style={{
                   default: isDarkMode
-                    ? { fill: "#1a2640", stroke: "rgba(100,160,255,0.15)", strokeWidth: 0.4, outline: "none" }
-                    : { fill: "#dff0f5", stroke: "#a8cdd8", strokeWidth: 0.4, outline: "none" },
-                  hover:   { fill: "rgba(59,130,246,0.55)", stroke: "#3b82f6", strokeWidth: 0.6, outline: "none", cursor: "pointer" },
+                    ? { fill: "#1a2640", stroke: "rgba(100,160,255,0.9)", strokeWidth: 0.2 / position.zoom, outline: "none" }
+                    : { fill: "#dff0f5", stroke: "#3a7a9c", strokeWidth: 0.2 / position.zoom, outline: "none" },
+                  hover:   { fill: "rgba(59,130,246,0.55)", stroke: "#3b82f6", strokeWidth: 0.35 / position.zoom, outline: "none", cursor: "pointer" },
                   pressed: { fill: "#0d9488", outline: "none" },
                 }}
               />
@@ -561,7 +633,7 @@ function MapPhase({ onConfirm }) {
             <MapMarker key={c.name} coordinates={c.coords}>
               <text textAnchor="middle" style={{
                 fontFamily: '"Pixelify Sans", sans-serif',
-                fontSize: `${14 / position.zoom}px`,
+                fontSize: `${(isMobile ? 30 : 14) / position.zoom}px`,
                 fill: isDarkMode ? "rgba(255,255,255,0.75)" : "rgba(70,100,130,0.6)",
                 fontWeight: 900, letterSpacing: "0.15em", pointerEvents: "none", userSelect: "none",
               }}>{c.name}</text>
@@ -574,16 +646,22 @@ function MapPhase({ onConfirm }) {
             (city.tier === 3 && position.zoom >= 4.5)
           ).map((city) => (
             <MapMarker key={city.name} coordinates={[city.coords[1], city.coords[0]]}
-              onClick={() => onConfirm({ name: city.name, coords: city.coords })}
+              onClick={() => {
+                if (isMultiDest) {
+                  toggleMultiDestItem({ name: city.name, coords: city.coords, type: "city" });
+                } else {
+                  onConfirm({ name: city.name, coords: city.coords });
+                }
+              }}
               style={{ cursor: "pointer" }}
             >
               <title>{city.name}</title>
               <circle r={2.6 / position.zoom} fill={cityPingColor} fillOpacity={0.92} />
               <circle r={5.2 / position.zoom} fill={cityPingColor} fillOpacity={isDarkMode ? 0.2 : 0.3} />
               {position.zoom >= 2.2 && (
-                <text y={-7 / position.zoom} textAnchor="middle" style={{
+                <text y={-(isMobile ? 22 : 7) / position.zoom} textAnchor="middle" style={{
                   fontFamily: '"Pixelify Sans", sans-serif',
-                  fontSize: `${10 / position.zoom}px`,
+                  fontSize: `${(isMobile ? 22 : 10) / position.zoom}px`,
                   fill: isDarkMode ? "rgba(255,255,255,0.8)" : "rgba(51,68,85,0.85)",
                   fontWeight: 700, pointerEvents: "none", userSelect: "none",
                 }}>{city.name}</text>
@@ -591,12 +669,29 @@ function MapPhase({ onConfirm }) {
             </MapMarker>
           ))}
 
-          {selected && (
+          {!isMultiDest && selected && (
             <MapMarker coordinates={[selected.coords[1], selected.coords[0]]}>
               <circle r={5 / position.zoom} fill="#0d9488" stroke="#fff" strokeWidth={1.5 / position.zoom} />
               <circle r={11 / position.zoom} fill="#0d9488" fillOpacity={0.25} />
             </MapMarker>
           )}
+
+          {isMultiDest && multiDests.map((dest, i) => (
+            <MapMarker key={dest.name} coordinates={[dest.coords[1], dest.coords[0]]}>
+              <circle r={12 / position.zoom} fill="#0d9488" fillOpacity={0.22} />
+              <circle r={7 / position.zoom} fill="#0d9488" stroke="#fff" strokeWidth={1.5 / position.zoom} />
+              <text
+                y={`${2.5 / position.zoom}`}
+                textAnchor="middle"
+                style={{
+                  fontSize: `${8 / position.zoom}px`,
+                  fill: "#fff", fontWeight: 900,
+                  pointerEvents: "none", userSelect: "none",
+                  fontFamily: "system-ui, sans-serif",
+                }}
+              >{i + 1}</text>
+            </MapMarker>
+          ))}
         </ZoomableGroup>
       </ComposableMap>
 
@@ -606,20 +701,91 @@ function MapPhase({ onConfirm }) {
           transition={{ duration: 0.6, delay: 0.1 }}
           style={{
             ...mapStyles.titleCard,
+            padding: isMobile ? "10px 14px 10px" : "20px 24px 16px",
+            gap: isMobile ? 4 : 6,
             background: isDarkMode ? "rgba(36,36,36,0.88)" : "rgba(255,249,240,0.95)",
             border: isDarkMode ? "1px solid rgba(255,255,255,0.12)" : "1px solid rgba(168,207,223,0.3)",
             boxShadow: isDarkMode ? "0 8px 40px rgba(0,0,0,0.5)" : "0 4px 16px rgba(168,207,223,0.15)",
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <div style={mapStyles.appName}>✈️ Trip Planner AI</div>
+          {!isMobile && (
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div style={mapStyles.appName}>✈️ Trip Planner AI</div>
+            </div>
+          )}
+          <div style={{
+            ...mapStyles.heroTitle,
+            fontSize: isMobile ? "1.25rem" : "1.9rem",
+            color: isDarkMode ? "#fff" : "#334455",
+          }}>
+            Where do you want to go?
           </div>
-          <div style={{ ...mapStyles.heroTitle, color: isDarkMode ? "#fff" : "#334455" }}>Where do you want to go?</div>
-          <div style={{ ...mapStyles.heroHint, color: isDarkMode ? "rgba(255,255,255,0.45)" : "rgba(100,120,140,0.6)" }}>
-            Search or click a country on the map
-          </div>
+          {!isMobile && (
+            <div style={{ ...mapStyles.heroHint, color: isDarkMode ? "rgba(255,255,255,0.45)" : "rgba(100,120,140,0.6)" }}>
+              Search or click a country on the map
+            </div>
+          )}
           <MapSearchBar onSelect={handleSearchSelect} isDarkMode={isDarkMode} />
-        </motion.div>
+
+          {/* Multi-city toggle */}
+          <button
+            type="button"
+            onClick={() => {
+              setIsMultiDest((prev) => !prev);
+              setMultiDests([]);
+              setSelected(null);
+              setShowRecommendations(false);
+              setFocusedRecommendation(null);
+              setCityRecommendations([]);
+              setRecommendationError("");
+            }}
+            style={{
+              display: "flex", alignItems: "center", gap: 8,
+              background: "none", border: "none", cursor: "pointer", padding: "4px 2px",
+              color: isDarkMode ? "rgba(255,255,255,0.6)" : "rgba(80,110,130,0.85)",
+              fontSize: "0.82rem", fontFamily: '"Pixelify Sans", sans-serif', fontWeight: 600,
+              textAlign: "left",
+            }}
+          >
+            <span style={{
+              width: 18, height: 18, borderRadius: 5, flexShrink: 0,
+              border: `2px solid ${isMultiDest ? "#0d9488" : isDarkMode ? "rgba(255,255,255,0.3)" : "rgba(100,140,160,0.4)"}`,
+              background: isMultiDest ? "#0d9488" : "transparent",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              transition: "all 0.15s",
+            }}>
+              {isMultiDest && <span style={{ color: "#fff", fontSize: 12, lineHeight: 1, fontWeight: 900 }}>✓</span>}
+            </span>
+            Multi-city trip
+            {isMultiDest && (
+              <span style={{
+                marginLeft: 2,
+                color: isDarkMode ? "rgba(255,255,255,0.35)" : "rgba(100,120,140,0.55)",
+                fontSize: "0.76rem", fontWeight: 400,
+              }}>
+                {multiDests.length}/5 selected
+              </span>
+            )}
+          </button>
+
+          {/* Hint shown when user clicks a country in multi-dest mode */}
+          <AnimatePresence>
+            {isMultiDest && multiDestHint && (
+              <motion.div
+                key="mdHint"
+                initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                style={{
+                  fontSize: "0.78rem", color: "#f59e0b",
+                  background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.3)",
+                  borderRadius: 8, padding: "6px 10px",
+                }}
+              >
+                ⚠️ {multiDestHint}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          </motion.div>
       </div>
 
       {/* Zoom controls — bottom right */}
@@ -627,7 +793,7 @@ function MapPhase({ onConfirm }) {
         position: "absolute", bottom: 32, right: 24, zIndex: 1000,
         display: "flex", flexDirection: "column", gap: 6,
       }}>
-        {[{ label: "+", delta: 1.2 }, { label: "−", delta: -1.2 }].map(({ label, delta }) => (
+        {[{ label: "+", delta: 1.5 }, { label: "−", delta: 1 / 1.5 }].map(({ label, delta }) => (
           <button key={label} type="button" onClick={() => handleZoom(delta)} style={{
             width: 40, height: 40,
             background: isDarkMode ? "rgba(10,10,18,0.88)" : "rgba(255,249,240,0.96)",
@@ -641,16 +807,65 @@ function MapPhase({ onConfirm }) {
         ))}
       </div>
 
-      {/* Bottom CTA */}
+      {/* Bottom CTA — multi-dest mode */}
       <AnimatePresence>
-        {selected && (
+        {isMultiDest && multiDests.length > 0 && (
+          <motion.div initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 40 }} transition={{ type: "spring", stiffness: 300, damping: 28 }}
+            style={mapStyles.bottomOverlay}
+          >
+            <div style={{
+              display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 8,
+              maxWidth: "min(680px, 92vw)", pointerEvents: "all",
+            }}>
+              {multiDests.map((dest, i) => (
+                <div key={dest.name} style={{
+                  display: "flex", alignItems: "center", gap: 6,
+                  background: "rgba(36,36,36,0.9)", backdropFilter: "blur(16px)",
+                  border: "1px solid rgba(13,148,136,0.5)", borderRadius: 24,
+                  padding: "6px 12px 6px 8px", boxShadow: "0 4px 16px rgba(0,0,0,0.35)",
+                }}>
+                  <span style={{
+                    width: 20, height: 20, borderRadius: "50%",
+                    background: "#0d9488", color: "#fff",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: "0.72rem", fontWeight: 900, flexShrink: 0,
+                  }}>{i + 1}</span>
+                  <span style={{ color: "#fff", fontSize: "0.88rem", fontWeight: 600, whiteSpace: "nowrap" }}>{dest.name}</span>
+                  <button type="button" onClick={() => toggleMultiDestItem(dest)} style={{
+                    background: "transparent", border: "none", color: "rgba(255,255,255,0.4)",
+                    cursor: "pointer", padding: "0 0 0 2px", fontSize: "0.8rem", lineHeight: 1,
+                  }}>✕</button>
+                </div>
+              ))}
+            </div>
+            {multiDests.length < 2 && (
+              <div style={{ fontSize: "0.8rem", color: "rgba(255,255,255,0.45)", pointerEvents: "none" }}>
+                Select at least 2 destinations
+              </div>
+            )}
+            {multiDests.length >= 2 && (
+              <motion.button type="button" whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.97 }}
+                style={mapStyles.ctaBtn} onClick={() => onConfirm(multiDests)}
+              >Plan Multi-City Trip →</motion.button>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Bottom CTA — single-dest mode */}
+      <AnimatePresence>
+        {!isMultiDest && selected && (
           <motion.div initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 40 }} transition={{ type: "spring", stiffness: 300, damping: 28 }}
             style={mapStyles.bottomOverlay}
           >
             <div style={mapStyles.selectedChip}>
               <span>📍</span>
-              <span style={mapStyles.selectedName}>{selected.name}</span>
+              <span style={{
+                ...mapStyles.selectedName,
+                fontSize: isMobile ? "1.15rem" : "0.95rem",
+              }}>{selected.name}</span>
               <button type="button" style={mapStyles.clearBtn} onClick={() => {
                 setSelected(null);
                 setShowRecommendations(false);
@@ -693,9 +908,14 @@ function MapPhase({ onConfirm }) {
                       key={city.name}
                       type="button"
                       onClick={() => {
-                        setFocusedRecommendation(city);
-                        setSelected({ name: city.name, coords: city.coords, type: "city", countryName: recommendationCountry });
-                        setPosition(constrain({ coordinates: [city.coords[1], city.coords[0]], zoom: 4.8 }));
+                        if (isMultiDest) {
+                          toggleMultiDestItem({ name: city.name, coords: city.coords, type: "city", countryName: recommendationCountry });
+                          setPosition(constrain({ coordinates: [city.coords[1], city.coords[0]], zoom: 4.8 }));
+                        } else {
+                          setFocusedRecommendation(city);
+                          setSelected({ name: city.name, coords: city.coords, type: "city", countryName: recommendationCountry });
+                          setPosition(constrain({ coordinates: [city.coords[1], city.coords[0]], zoom: 4.8 }));
+                        }
                       }}
                       style={mapStyles.recommendCityBtn}
                     >
@@ -756,6 +976,56 @@ function MapPhase({ onConfirm }) {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Country name tooltip — desktop hover only */}
+      {hoveredCountry && !isMobile && (() => {
+        const SHORT_NAMES = {
+          "United States of America": "United States",
+          "Russian Federation": "Russia",
+          "United Kingdom of Great Britain and Northern Ireland": "United Kingdom",
+          "Democratic Republic of the Congo": "DR Congo",
+          "Republic of the Congo": "Congo",
+          "Central African Republic": "Central Africa",
+          "Dominican Republic": "Dominican Rep.",
+          "Bosnia and Herzegovina": "Bosnia & Herzegovina",
+          "Trinidad and Tobago": "Trinidad & Tobago",
+          "Saint Vincent and the Grenadines": "St. Vincent",
+          "Micronesia (Federated States of)": "Micronesia",
+          "Iran (Islamic Republic of)": "Iran",
+          "Korea (Republic of)": "South Korea",
+          "Korea (Democratic People's Republic of)": "North Korea",
+          "Tanzania, United Republic of": "Tanzania",
+          "Syrian Arab Republic": "Syria",
+          "Lao People's Democratic Republic": "Laos",
+          "Venezuela (Bolivarian Republic of)": "Venezuela",
+          "Bolivia (Plurinational State of)": "Bolivia",
+        };
+        const displayName = SHORT_NAMES[hoveredCountry] ?? hoveredCountry;
+        return (
+          <div style={{
+            position: "absolute",
+            left: Math.min(tooltipPos.x + 14, (mapRef.current?.offsetWidth ?? 9999) - 160),
+            top: Math.max(tooltipPos.y - 36, 8),
+            background: isDarkMode ? "rgba(10,10,24,0.92)" : "rgba(255,249,240,0.96)",
+            color: isDarkMode ? "rgba(220,235,255,0.92)" : "#334455",
+            border: isDarkMode ? "1px solid rgba(255,255,255,0.14)" : "1px solid rgba(168,207,223,0.5)",
+            borderRadius: 8,
+            padding: "5px 12px",
+            fontSize: "0.82rem",
+            fontWeight: 700,
+            fontFamily: '"Pixelify Sans", sans-serif',
+            pointerEvents: "none",
+            zIndex: 500,
+            backdropFilter: "blur(10px)",
+            WebkitBackdropFilter: "blur(10px)",
+            boxShadow: "0 4px 16px rgba(0,0,0,0.25)",
+            whiteSpace: "nowrap",
+            letterSpacing: "0.02em",
+          }}>
+            {displayName}
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -788,8 +1058,9 @@ function StepDots({ step }) {
 }
 
 // ─── StepBox — unified shell for all 3 steps ─────────────────────────────────
-function StepBox({ children, onBack, backLabel = "← Back", onNext, onSubmit, loading, err, isLast, streamChars = 0 }) {
+function StepBox({ children, onBack, backLabel = "← Back", onAltBack, altBackLabel, onNext, onSubmit, loading, err, isLast, streamChars = 0 }) {
   const isDarkMode = useIsDarkMode();
+  const isMobile = useIsMobile();
   const borderColor = isDarkMode ? "rgba(255,255,255,0.12)" : "rgba(168,207,223,0.35)";
   const isGenerating = loading && isLast;
 
@@ -814,43 +1085,78 @@ function StepBox({ children, onBack, backLabel = "← Back", onNext, onSubmit, l
       overflow: "visible",
     }}>
       {/* Content area */}
-      <div style={{ flex: 1, overflowY: "auto", padding: "18px 22px 8px" }}>
+      <div style={{ flex: 1, overflowY: "auto", padding: isMobile ? "14px 16px 8px" : "18px 22px 8px" }}>
         {children}
       </div>
 
       {/* Error */}
       {!isGenerating && err && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-          style={{ ...styles.errBox, margin: "0 22px 0", flexShrink: 0 }}
+          style={{ ...styles.errBox, margin: isMobile ? "0 16px 0" : "0 22px 0", flexShrink: 0 }}
         >{err}</motion.div>
       )}
 
       {/* Nav bar — hidden while generating */}
       {!isGenerating && (
         <div style={{
-          display: "flex", alignItems: "center", gap: 12,
-          padding: "14px 22px 16px",
+          display: "flex",
+          alignItems: "center",
+          flexWrap: isMobile ? "wrap" : "nowrap",
+          gap: isMobile ? 8 : 12,
+          padding: isMobile ? "12px 16px 14px" : "14px 22px 16px",
           borderTop: `1px solid ${borderColor}`,
           flexShrink: 0,
           marginTop: 8,
         }}>
-          <motion.button
-            type="button"
-            whileHover={{ scale: 1.03, background: isDarkMode ? "rgba(255,255,255,0.06)" : "rgba(168,207,223,0.2)" }}
-            whileTap={{ scale: 0.97 }}
-            style={styles.backBtn}
-            onClick={onBack}
-            disabled={loading}
-          >
-            {backLabel}
-          </motion.button>
-          <div style={{ flex: 1 }} />
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <motion.button
+              type="button"
+              whileHover={{ scale: 1.03, background: isDarkMode ? "rgba(255,255,255,0.06)" : "rgba(168,207,223,0.2)" }}
+              whileTap={{ scale: 0.97 }}
+              style={{
+                ...styles.backBtn,
+                padding: isMobile ? "11px 18px" : "13px 26px",
+                fontSize: isMobile ? "0.9rem" : "1rem",
+              }}
+              onClick={onBack}
+              disabled={loading}
+            >
+              {backLabel}
+            </motion.button>
+            {onAltBack && (
+              <motion.button
+                type="button"
+                whileHover={{ scale: 1.03, background: isDarkMode ? "rgba(13,148,136,0.12)" : "rgba(13,148,136,0.08)" }}
+                whileTap={{ scale: 0.97 }}
+                style={{
+                  ...styles.backBtn,
+                  padding: isMobile ? "11px 18px" : "13px 26px",
+                  fontSize: isMobile ? "0.9rem" : "1rem",
+                  border: "1px solid rgba(13,148,136,0.4)",
+                  color: isDarkMode ? "#7ee7d6" : "#0d6b5e",
+                }}
+                onClick={onAltBack}
+                disabled={loading}
+              >
+                {altBackLabel}
+              </motion.button>
+            )}
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }} />
           {isLast ? (
             <motion.button
               type="button"
               whileHover={{ scale: 1.04, boxShadow: "0 8px 32px rgba(13,148,136,0.6)" }}
               whileTap={{ scale: 0.97 }}
-              style={styles.generateBtn}
+              style={{
+                ...styles.generateBtn,
+                ...(isMobile && {
+                  width: "100%",
+                  padding: "14px 20px",
+                  fontSize: "1rem",
+                  justifyContent: "center",
+                }),
+              }}
               onClick={onSubmit}
               disabled={loading}
             >
@@ -861,7 +1167,10 @@ function StepBox({ children, onBack, backLabel = "← Back", onNext, onSubmit, l
               type="button"
               whileHover={{ scale: 1.04 }}
               whileTap={{ scale: 0.97 }}
-              style={styles.nextBtn}
+              style={{
+                ...styles.nextBtn,
+                padding: isMobile ? "11px 22px" : "13px 30px",
+              }}
               onClick={onNext}
               disabled={loading}
             >
@@ -879,6 +1188,7 @@ export default function Wizard() {
   const [mapDone, setMapDone]         = useState(false);
   const [origin, setOrigin]           = useState("");
   const [destination, setDestination] = useState("");
+  const [destinations, setDestinations] = useState([]); // multi-dest array (empty = single-dest)
 
   const [step, setStep]           = useState(0);
   const [direction, setDirection] = useState(1);
@@ -926,6 +1236,14 @@ export default function Wizard() {
     else goTo(step - 1);
   };
 
+  const handleNewTrip = () => {
+    setErr("");
+    setDestinations([]);
+    setDestination("");
+    setMapDone(false);
+    prevStepRef.current = 0;
+  };
+
 const handleSubmit = () => {
   setErr("");
   clearError();
@@ -940,6 +1258,7 @@ const handleSubmit = () => {
     trip_type: tripType, group_size: Number(groupSize),
     transport_mode: transportMode,
     additional_notes: notes.trim() || null,
+    ...(destinations.length > 1 && { destinations: destinations.map((d) => d.name) }),
   };
   startGeneration(payload);
 };
@@ -957,7 +1276,20 @@ const handleSubmit = () => {
         <motion.div key="map" initial={{ opacity: 1 }} exit={{ opacity: 0, scale: 1.04 }}
           transition={{ duration: 0.5 }} style={{ position: "absolute", inset: 0 }}
         >
-          <MapPhase onConfirm={(sel) => { setDestination(sel.name); setMapDone(true); }} />
+          <MapPhase
+            initialIsMultiDest={destinations.length > 1}
+            initialMultiDests={destinations.length > 1 ? destinations : []}
+            onConfirm={(sel) => {
+              if (Array.isArray(sel)) {
+                setDestinations(sel);
+                setDestination(sel.map((d) => d.name).join(" → "));
+              } else {
+                setDestinations([]);
+                setDestination(sel.name);
+              }
+              setMapDone(true);
+            }}
+          />
           {isGenerating && (
             <motion.div
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }}
@@ -1002,7 +1334,10 @@ const handleSubmit = () => {
             >
               {step === 0 && (
                 <StepBox
-                  onBack={handleBack} backLabel="← Back to Map"
+                  onBack={handleBack}
+                  backLabel={destinations.length > 1 ? "← Edit Route" : "← Back to Map"}
+                  onAltBack={destinations.length > 1 ? handleNewTrip : undefined}
+                  altBackLabel="🗺️ New Trip"
                   onNext={handleNext} loading={loading} err={err || genError}
                 >
                   <StepDatesAndBudget
@@ -1011,6 +1346,7 @@ const handleSubmit = () => {
                     calMonth={calMonth} setCalMonth={setCalMonth}
                     origin={origin} setOrigin={setOrigin}
                     destination={destination}
+                    destinations={destinations} setDestinations={setDestinations}
                     budget={budget} setBudget={setBudget}
                     budgetType={budgetType} setBudgetType={setBudgetType}
                     groupSize={groupSize} setGroupSize={setGroupSize}
@@ -1133,11 +1469,43 @@ function getDisabledModes(originStr, destStr) {
 }
 
 function StepDatesAndBudget({
-  origin, setOrigin, destination, dateRange, setDateRange, showCal, setShowCal, calMonth, setCalMonth,
+  origin, setOrigin, destination, destinations = [], setDestinations,
+  dateRange, setDateRange, showCal, setShowCal, calMonth, setCalMonth,
   budget, setBudget, budgetType, setBudgetType, groupSize, setGroupSize, currency, setCurrency,
   transportMode, setTransportMode, tripType, setTripType,
 }) {
   const isDarkMode = useIsDarkMode();
+  const isMultiDestTrip = destinations.length > 1;
+
+  const [optimizing, setOptimizing] = useState(false);
+  const [isOptimized, setIsOptimized] = useState(false);
+  const handleOptimize = async () => {
+    if (!origin.trim() || destinations.length < 2) return;
+    setOptimizing(true);
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(origin)}&format=json&limit=1`,
+        { headers: { "Accept-Language": "en" } }
+      );
+      const data = await res.json();
+      if (!data[0]) return;
+      const oCoords = [parseFloat(data[0].lat), parseFloat(data[0].lon)];
+      let bestPerm = destinations;
+      let bestDist = Infinity;
+      for (const perm of permutations(destinations)) {
+        let dist = haversineKm(oCoords, perm[0].coords);
+        for (let j = 0; j < perm.length - 1; j++) dist += haversineKm(perm[j].coords, perm[j + 1].coords);
+        dist += haversineKm(perm[perm.length - 1].coords, oCoords);
+        if (dist < bestDist) { bestDist = dist; bestPerm = perm; }
+      }
+      setDestinations(bestPerm);
+      setIsOptimized(true);
+    } catch {
+      // fail silently
+    } finally {
+      setOptimizing(false);
+    }
+  };
 
   const disabledModes = getDisabledModes(origin, destination);
 
@@ -1152,6 +1520,13 @@ function StepDatesAndBudget({
   }, [disabledModes, transportMode, setTransportMode]);
   const inputBg     = isDarkMode ? "rgba(255,255,255,0.04)" : "rgba(168,207,223,0.12)";
   const panelBorder = isDarkMode ? "1px solid rgba(255,255,255,0.12)" : "1px solid rgba(168,207,223,0.35)";
+
+  const tripDays = dateRange.from && dateRange.to
+    ? Math.round((dateRange.to - dateRange.from) / (1000 * 60 * 60 * 24))
+    : null;
+  const minDaysPerCity = 2;
+  const idealDaysPerCity = 3;
+  const paceTooTight = isMultiDestTrip && tripDays !== null && tripDays < destinations.length * minDaysPerCity;
 
   const numBudget = Number(budget) || 0;
   const numGroup  = Number(groupSize) || 1;
@@ -1188,8 +1563,135 @@ function StepDatesAndBudget({
 
       <div style={styles.stepLabel}>Step 1 of 2</div>
 
-      {/* Three-column layout */}
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,0.8fr) minmax(0,1.2fr)", gap: 16, alignItems: "start" }}>
+      {/* Route ordering — only shown for multi-destination trips */}
+      {isMultiDestTrip && (
+        <div style={{
+          background: isDarkMode ? "rgba(13,148,136,0.06)" : "rgba(13,148,136,0.05)",
+          border: isDarkMode ? "1px solid rgba(13,148,136,0.25)" : "1px solid rgba(13,148,136,0.2)",
+          borderRadius: 12, padding: "14px 16px", display: "flex", flexDirection: "column", gap: 10,
+        }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div style={{ ...styles.stepTitle, margin: 0 }}>🗺️ Trip Route</div>
+              <AnimatePresence>
+                {isOptimized && (
+                  <motion.div
+                    key="optimized-badge"
+                    initial={{ opacity: 0, scale: 0.75 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.75 }}
+                    transition={{ type: "spring", stiffness: 400, damping: 22 }}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 4,
+                      background: "rgba(13,148,136,0.15)",
+                      border: "1px solid rgba(13,148,136,0.4)",
+                      borderRadius: 20, padding: "3px 10px",
+                      fontSize: "0.72rem", fontWeight: 700,
+                      color: isDarkMode ? "#7ee7d6" : "#0d6b5e",
+                      fontFamily: '"Pixelify Sans", sans-serif',
+                      letterSpacing: "0.03em",
+                    }}
+                  >
+                    ✓ Optimized
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+            <button
+              type="button"
+              onClick={handleOptimize}
+              disabled={optimizing || !origin.trim()}
+              title={!origin.trim() ? "Fill in your departure city first" : "Sort by shortest travel distance from your origin"}
+              style={{
+                display: "flex", alignItems: "center", gap: 6,
+                padding: "7px 14px", borderRadius: 8,
+                border: "1px solid rgba(13,148,136,0.4)",
+                background: isDarkMode ? "rgba(13,148,136,0.12)" : "rgba(13,148,136,0.08)",
+                color: isDarkMode ? "#7ee7d6" : "#0d6b5e",
+                cursor: optimizing || !origin.trim() ? "not-allowed" : "pointer",
+                opacity: !origin.trim() ? 0.5 : 1,
+                fontSize: "0.8rem", fontWeight: 700,
+                fontFamily: '"Pixelify Sans", sans-serif',
+                transition: "opacity 0.15s",
+              }}
+            >
+              {optimizing ? "⏳ Optimizing…" : "✨ Optimize Order"}
+            </button>
+          </div>
+          <Reorder.Group
+            axis="y"
+            values={destinations}
+            onReorder={(next) => { setDestinations(next); setIsOptimized(false); }}
+            style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 5 }}
+          >
+            {destinations.map((dest, i) => (
+              <Reorder.Item
+                key={dest.name}
+                value={dest}
+                style={{ listStyle: "none" }}
+                initial={false}
+                animate={{ scale: 1, boxShadow: "0px 0px 0px rgba(0,0,0,0)" }}
+                whileDrag={{ scale: 1.03, boxShadow: "0px 10px 28px rgba(0,0,0,0.28)" }}
+                transition={{ duration: 0.15 }}
+              >
+                <div style={{
+                  display: "flex", alignItems: "center", gap: 12,
+                  padding: "9px 12px", borderRadius: 11,
+                  background: "var(--bg-card)", border: "1px solid var(--border-col)",
+                  cursor: "grab", userSelect: "none",
+                }}>
+                  <div style={{
+                    minWidth: 26, height: 26, borderRadius: "50%",
+                    background: RANK_COLORS[i] ?? "#94a3b8",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: "0.78rem", fontWeight: 900, color: "#fff", flexShrink: 0,
+                    fontFamily: '"Pixelify Sans", sans-serif',
+                  }}>{i + 1}</div>
+                  <span style={{ flex: 1, fontSize: "0.9rem", color: "var(--white)", fontWeight: 500 }}>{dest.name}</span>
+                  <span style={{ color: "var(--text-muted)", fontSize: "1rem", opacity: 0.4 }}>⠿</span>
+                </div>
+              </Reorder.Item>
+            ))}
+          </Reorder.Group>
+          <AnimatePresence>
+            {paceTooTight && (
+              <motion.div
+                key="pace-warn"
+                initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.2 }}
+                style={{
+                  display: "flex", alignItems: "flex-start", gap: 8,
+                  padding: "9px 12px", borderRadius: 9,
+                  background: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.3)",
+                }}
+              >
+                <span style={{ fontSize: "0.85rem", flexShrink: 0, marginTop: 1 }}>⚠️</span>
+                <span style={{ fontSize: "0.78rem", color: "var(--text-muted)", lineHeight: 1.55 }}>
+                  <span style={{ fontWeight: 700, color: "#f59e0b" }}>
+                    {tripDays} day{tripDays !== 1 ? "s" : ""} for {destinations.length} cities is too rushed.
+                  </span>{" "}
+                  Recommend at least{" "}
+                  <span style={{ fontWeight: 700, color: "var(--white)" }}>
+                    {destinations.length * minDaysPerCity} days
+                  </span>{" "}
+                  ({destinations.length} × {minDaysPerCity} min), ideally{" "}
+                  <span style={{ fontWeight: 700, color: "var(--white)" }}>
+                    {destinations.length * idealDaysPerCity} days
+                  </span>{" "}
+                  ({destinations.length} × {idealDaysPerCity} days per city).
+                </span>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <div style={{ fontSize: "0.76rem", color: "var(--text-muted)", marginTop: -2 }}>
+            Optimize finds the shortest route from your departure city.
+          </div>
+        </div>
+      )}
+
+      {/* Three-column layout — collapses to single column on mobile via .rsp-3col */}
+      <div className="rsp-3col">
 
         {/* ── LEFT COLUMN: origin + transport + budget ── */}
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -1367,7 +1869,7 @@ function StepPreferencesAndDetails({
       <div style={styles.stepLabel}>Step 2 of 2</div>
 
       {/* Two-column layout */}
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)", gap: 20, alignItems: "start" }}>
+      <div className="rsp-2col">
 
         {/* ── LEFT: priorities ── */}
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -1660,7 +2162,7 @@ const mapStyles = {
   topOverlay: {
     position: "absolute", top: 0, left: 0, right: 0, zIndex: 1000,
     display: "flex", justifyContent: "center",
-    padding: "72px 20px 0", pointerEvents: "none",
+    padding: "64px 16px 0", pointerEvents: "none",
   },
   titleCard: {
     backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)",
@@ -1689,7 +2191,7 @@ const mapStyles = {
   suggestionIcon: { fontSize: "1rem", flexShrink: 0 },
   suggestionText: { fontSize: "0.9rem", lineHeight: 1.3 },
   bottomOverlay: {
-    position: "absolute", bottom: 28, left: 0, right: 0, zIndex: 1000,
+    position: "absolute", bottom: "max(28px, env(safe-area-inset-bottom, 28px))", left: 0, right: 0, zIndex: 1000,
     display: "flex", flexDirection: "column", alignItems: "center", gap: 12, pointerEvents: "none",
   },
   selectedChip: {
@@ -1741,15 +2243,16 @@ const styles = {
   display: "flex", flexDirection: "column", alignItems: "center",
   height: "100vh",
   width: "100%",
-  padding: "20px 16px 80px",
+  padding: "20px 16px max(env(safe-area-inset-bottom, 0px) + 32px, 64px)",
   boxSizing: "border-box",
   overflowY: "auto",
+  overflowX: "hidden",
 },
 content: {
   display: "flex", flexDirection: "column", alignItems: "center",
   width: "100%", maxWidth: 1020,
   gap: 12,
-  minHeight: 0,
+  flexShrink: 0,
 },
   header: { textAlign: "center", width: "100%", flexShrink: 0 },
   title: { fontSize: "1.8rem", fontWeight: 900, fontFamily: '"Pixelify Sans", sans-serif', color: "var(--white)" },
@@ -1757,7 +2260,7 @@ content: {
   dots: { display: "flex", gap: 6, alignItems: "center", justifyContent: "center", flexShrink: 0 },
   dot: { height: 8, borderRadius: 4, transition: "all 0.3s ease" },
   // cardWrap grows to fill remaining height so StepBox gets the space it needs
-  cardWrap: { width: "100%", minHeight: 0, overflow: "visible" },  // remove flex: 1
+  cardWrap: { width: "100%", minHeight: 0, overflow: "visible", marginBottom: 8 },
   stepLabel: { fontSize: "0.73rem", color: "var(--cal-accent)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em" },
   stepTitle: { fontSize: "1.1rem", fontWeight: 700, fontFamily: '"Pixelify Sans", sans-serif', color: "var(--white)" },
   stepHint:  { fontSize: "0.83rem", color: "var(--text-muted)", marginTop: -6 },
@@ -1818,7 +2321,7 @@ content: {
     background: "linear-gradient(135deg, #0d9488 0%, #0891b2 100%)",
     color: "#fff", fontSize: "1.1rem", fontWeight: 700, cursor: "pointer",
     fontFamily: '"Pixelify Sans", sans-serif',
-    display: "flex", alignItems: "center", gap: 10, flexShrink: 0,
+    display: "flex", alignItems: "center", gap: 10,
     boxShadow: "0 6px 24px rgba(13,148,136,0.5)",
     letterSpacing: "0.02em",
   },

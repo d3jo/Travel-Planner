@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useIsDarkMode } from "../contexts/ThemeContext";
 import { useAuth } from "../contexts/AuthContext";
+import { useIsMobile } from "../hooks/useIsMobile";
 import api from "../api";
 
 function getTabs(nights) {
@@ -38,6 +39,13 @@ const scrollbarCSS = `
     outline: none !important;
     box-shadow: none !important;
   }
+  @media (max-width: 639px) {
+    .trip-tab-btn {
+      font-size: 0.82rem !important;
+      padding: 10px 10px !important;
+      min-width: max-content;
+    }
+  }
 `;
 
 export default function TripPlan() {
@@ -45,6 +53,7 @@ export default function TripPlan() {
   const nav = useNavigate();
   const plan = loc.state?.plan;
   const isDarkMode = useIsDarkMode();
+  const isMobile = useIsMobile();
   const prefs = loc.state?.preferences;
 
   const nights = (() => {
@@ -103,10 +112,10 @@ export default function TripPlan() {
           {/* Header */}
           <motion.div initial={{ opacity: 0, y: -16 }} animate={{ opacity: 1, y: 0 }} style={styles.header}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
-              <button style={styles.newTripBtn} onClick={() => nav("/")}>← New Trip</button>
-              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <button style={{ ...styles.newTripBtn, minHeight: 44 }} onClick={() => nav("/")}>← New Trip</button>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                 {isLoggedIn && (
-                  <button style={{ ...styles.newTripBtn, color: "var(--text-muted)" }} onClick={() => nav("/my-trips")}>
+                  <button style={{ ...styles.newTripBtn, color: "var(--text-muted)", minHeight: 44 }} onClick={() => nav("/my-trips")}>
                     My Trips
                   </button>
                 )}
@@ -118,6 +127,7 @@ export default function TripPlan() {
                     color: "#fff",
                     opacity: saving ? 0.6 : 1,
                     cursor: saving ? "not-allowed" : "pointer",
+                    minHeight: 44,
                   }}
                   onClick={handleSave}
                   disabled={saving || saved}
@@ -129,8 +139,13 @@ export default function TripPlan() {
             {saveErr && (
               <div style={{ fontSize: 12, color: "#f87171", marginBottom: 6 }}>{saveErr}</div>
             )}
-            <div style={styles.destination}>{prefs?.destination || "Your Trip"}</div>
-            <div style={styles.dateRow}>
+            <div style={{
+              ...styles.destination,
+              fontSize: "clamp(1.6rem, 5.5vw, 2.4rem)",
+            }}>
+              {prefs?.destination || "Your Trip"}
+            </div>
+            <div style={{ ...styles.dateRow, flexWrap: "wrap", lineHeight: 1.8 }}>
               {prefs?.start_date} → {prefs?.end_date} · {prefs?.group_size} traveler{prefs?.group_size !== 1 ? "s" : ""} · {prefs?.budget?.toLocaleString()} {prefs?.currency}
               <span style={{
                 marginLeft: 6,
@@ -142,6 +157,7 @@ export default function TripPlan() {
                 color: prefs?.budget_type === "per_person" ? "#0d9488" : "#8b5cf6",
                 border: `1px solid ${prefs?.budget_type === "per_person" ? "rgba(13,148,136,0.35)" : "rgba(139,92,246,0.35)"}`,
                 verticalAlign: "middle",
+                display: "inline-block",
               }}>
                 {prefs?.budget_type === "per_person" ? "per person" : "total"}
               </span>
@@ -158,8 +174,11 @@ export default function TripPlan() {
 
 
 
-          {/* Tab Bar — evenly spaced */}
-          <div style={styles.tabBar}>
+          {/* Tab Bar — scrolls horizontally on mobile, invisible scrollbar */}
+          <div style={{
+            ...styles.tabBar,
+            justifyContent: isMobile ? "flex-start" : "space-between",
+          }}>
             {TABS.map((tab) => (
               <button
                 key={tab}
@@ -173,6 +192,7 @@ export default function TripPlan() {
                     ? (isDarkMode ? "#ffffff" : "#0f172a")
                     : (isDarkMode ? "rgba(255,255,255,0.35)" : "rgba(15,23,42,0.35)"),
                   fontWeight: activeTab === tab ? 700 : 400,
+                  ...(isMobile && { flex: "0 0 auto" }),
                 }}
               >
                 {tab}
@@ -236,7 +256,7 @@ function TabOverview({ plan, prefs }) {
 
       {plan.recommended_places?.length > 0 && (
         <Card title="🗺️ Recommended Places">
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 10 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(220px, 100%), 1fr))", gap: 10 }}>
             {plan.recommended_places.map((p, i) => {
               const { color, bg, border } = placeCategoryStyle(p.category);
               return (
@@ -1265,9 +1285,9 @@ const styles = {
     display: "flex",
     flexDirection: "column",
     alignItems: "center",
-    height: "calc(100vh - 32px)",  // subtract TitleBar height
+    height: "calc(100vh - 56px)",
     width: "100%",
-    padding: "16px 16px 40px",
+    padding: "16px 16px max(env(safe-area-inset-bottom, 0px) + 16px, 40px)",
     boxSizing: "border-box",
     overflowY: "scroll",
     overflowX: "hidden",
@@ -1292,7 +1312,7 @@ const styles = {
     color: "var(--white)",
     cursor: "pointer",
     fontSize: "0.85rem",
-    marginBottom: 12,
+    marginBottom: 0,
   },
   destination: {
     fontSize: "2.4rem",
@@ -1327,9 +1347,10 @@ const styles = {
   },
   tabBar: {
     display: "flex",
-    justifyContent: "space-between", // evenly spaced tabs
+    justifyContent: "space-between",
     width: "100%",
     overflowX: "auto",
+    WebkitOverflowScrolling: "touch",
     borderBottom: "1px solid var(--border-col)",
   },
   tabBtn: {
@@ -1340,13 +1361,14 @@ const styles = {
     borderRadius: 0,
     cursor: "pointer",
     fontFamily: '"Pixelify Sans", sans-serif',
-    fontSize: "1.05rem",        // bigger
-    letterSpacing: "0.03em",    // slightly spaced
+    fontSize: "1.05rem",
+    letterSpacing: "0.03em",
     transition: "color 0.2s, border-color 0.2s",
     outline: "none",
     boxShadow: "none",
     whiteSpace: "nowrap",
     textAlign: "center",
+    minHeight: 44,
 },
   tabContent: {
     display: "flex",
@@ -1419,6 +1441,8 @@ const styles = {
     justifyContent: "space-between",
     alignItems: "flex-start",
     marginBottom: 6,
+    flexWrap: "wrap",
+    gap: 8,
   },
   hotelName: {
     fontSize: "1.1rem",
@@ -1460,9 +1484,10 @@ const styles = {
   activityHeader: {
     display: "flex",
     justifyContent: "space-between",
-    alignItems: "center",
+    alignItems: "flex-start",
     marginBottom: 8,
     gap: 8,
+    flexWrap: "wrap",
   },
   activityName: {
     fontSize: "1.05rem",
