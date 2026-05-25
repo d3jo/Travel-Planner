@@ -372,14 +372,36 @@ function ResourceLink({ href, label = "Open link" }) {
 // ─── Hotels Tab ───────────────────────────────────────────────────────────────
 function groupByCity(items, cities) {
   if (!cities?.length) return null;
+  const trimmed = cities.map((c) => c.trim());
+  const lcMap = {};
+  trimmed.forEach((c) => { lcMap[c.toLowerCase()] = c; });
   const groups = {};
-  cities.forEach((c) => { groups[c] = []; });
+  trimmed.forEach((c) => { groups[c] = []; });
+
+  // Returns canonical city name if text contains or matches any known city
+  const findMatch = (text) => {
+    if (!text || typeof text !== "string") return null;
+    const lc = text.toLowerCase().trim();
+    if (lcMap[lc]) return lcMap[lc];
+    const k = Object.keys(lcMap).find((k) => lc.includes(k) || k.includes(lc));
+    return k ? lcMap[k] : null;
+  };
+
   items.forEach((item) => {
-    const city = item.city;
-    if (city && groups[city]) groups[city].push(item);
-    else if (city) { groups[city] = [item]; }
-    else groups[cities[0]].push(item); // fallback
+    // Try explicit city field → neighborhood → location (hotels) as fallback
+    const matched =
+      findMatch(item.city) ||
+      findMatch(item.neighborhood) ||
+      findMatch(item.location);
+
+    if (matched) { groups[matched].push(item); return; }
+    // Truly unknown city — own group
+    const raw = typeof item.city === "string" ? item.city.trim() : null;
+    if (raw) { groups[raw] = groups[raw] || []; groups[raw].push(item); return; }
+    // No city info at all — fall to first city
+    groups[trimmed[0]].push(item);
   });
+
   return Object.entries(groups).filter(([, v]) => v.length > 0);
 }
 
