@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useGeneration } from "../contexts/GenerationContext";
 import { DayPicker } from "react-day-picker";
 import { AnimatePresence, motion, Reorder } from "framer-motion";
@@ -1196,12 +1196,36 @@ export default function Wizard() {
   const [origin, setOrigin]           = useState("");
   const [destination, setDestination] = useState("");
   const [destinations, setDestinations] = useState([]); // multi-dest array (empty = single-dest)
+  const [autoDistribute, setAutoDistribute] = useState(true);
+  // Array of city names, one per night — allows Osaka→Fukuoka→Osaka patterns
+  const [dayAssignments, setDayAssignments] = useState([]);
 
   const [step, setStep]           = useState(0);
   const [direction, setDirection] = useState(1);
   const prevStepRef               = useRef(0);
 
   const [dateRange, setDateRange] = useState({ from: undefined, to: undefined });
+
+  // Re-distribute nights equally whenever destinations or date range changes
+  useEffect(() => {
+    const totalNights = dateRange.from && dateRange.to
+      ? Math.round((dateRange.to - dateRange.from) / (1000 * 60 * 60 * 24))
+      : 0;
+    if (destinations.length < 2 || totalNights <= 0) {
+      setDayAssignments((prev) => prev.length === 0 ? prev : []);
+      return;
+    }
+    const base = Math.floor(totalNights / destinations.length);
+    const extra = totalNights % destinations.length;
+    const init = [];
+    destinations.forEach((d, i) => {
+      for (let n = 0; n < base + (i < extra ? 1 : 0); n++) init.push(d.name);
+    });
+    setDayAssignments((prev) => {
+      if (prev.length === init.length && prev.every((c, j) => c === init[j])) return prev;
+      return init;
+    });
+  }, [destinations, dateRange.from, dateRange.to]); // eslint-disable-line react-hooks/exhaustive-deps
   const [showCal, setShowCal]     = useState(false);
   const [calMonth, setCalMonth]   = useState(() => { const d = new Date(); d.setDate(1); return d; });
 
@@ -1266,6 +1290,10 @@ const handleSubmit = () => {
     transport_mode: transportMode,
     additional_notes: notes.trim() || null,
     ...(destinations.length > 1 && { destinations: destinations.map((d) => d.name) }),
+    ...(destinations.length > 1 && {
+      auto_distribute_days: autoDistribute,
+      day_assignments: autoDistribute ? null : dayAssignments,
+    }),
   };
   startGeneration(payload);
 };
@@ -1354,6 +1382,8 @@ const handleSubmit = () => {
                     origin={origin} setOrigin={setOrigin}
                     destination={destination}
                     destinations={destinations} setDestinations={setDestinations}
+                    autoDistribute={autoDistribute} setAutoDistribute={setAutoDistribute}
+                    dayAssignments={dayAssignments} setDayAssignments={setDayAssignments}
                     budget={budget} setBudget={setBudget}
                     budgetType={budgetType} setBudgetType={setBudgetType}
                     groupSize={groupSize} setGroupSize={setGroupSize}
@@ -1477,12 +1507,69 @@ function getDisabledModes(originStr, destStr) {
 
 function StepDatesAndBudget({
   origin, setOrigin, destination, destinations = [], setDestinations,
+  autoDistribute, setAutoDistribute, dayAssignments, setDayAssignments,
   dateRange, setDateRange, showCal, setShowCal, calMonth, setCalMonth,
   budget, setBudget, budgetType, setBudgetType, groupSize, setGroupSize, currency, setCurrency,
   transportMode, setTransportMode, tripType, setTripType,
 }) {
   const isDarkMode = useIsDarkMode();
   const isMultiDestTrip = destinations.length > 1;
+
+  // City palette state for painting mode
+  const [activeCity, setActiveCity] = useState(() => destinations[0]?.name ?? "");
+  const isPainting = useRef(false);
+
+  // Reset active city if destinations change and current active no longer exists
+  useEffect(() => {
+    if (destinations.length > 0 && !destinations.some((d) => d.name === activeCity)) {
+      setActiveCity(destinations[0].name);
+    }
+  }, [destinations]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Clear paint flag when mouse is released anywhere on page
+  useEffect(() => {
+    const onUp = () => { isPainting.current = false; };
+    document.addEventListener("mouseup", onUp);
+    return () => document.removeEventListener("mouseup", onUp);
+  }, []);
+
+  const assignDayToActiveCity = useCallback((day) => {
+    if (!dateRange.from || !dateRange.to) return;
+    const idx = Math.round((day.getTime() - dateRange.from.getTime()) / 86400000);
+    if (idx < 0 || idx >= dayAssignments.length) return;
+    setDayAssignments((prev) => {
+      if (prev[idx] === activeCity) return prev;
+      const next = [...prev];
+      next[idx] = activeCity;
+      return next;
+    });
+  }, [dateRange.from, dateRange.to, dayAssignments.length, activeCity, setDayAssignments]);
+
+  // Build per-city date arrays for DayPicker modifiers
+  const cityModifiers = useMemo(() => {
+    if (!dateRange.from || dayAssignments.length === 0) return {};
+    const result = {};
+    destinations.forEach((dest) => { result[`city__${dest.name}`] = []; });
+    dayAssignments.forEach((city, i) => {
+      const date = new Date(dateRange.from.getTime() + i * 86400000);
+      const key = `city__${city}`;
+      if (result[key]) result[key].push(date);
+    });
+    return result;
+  }, [dateRange.from, dayAssignments, destinations]);
+
+  const cityModifierStyles = useMemo(() => {
+    const result = {};
+    destinations.forEach((dest, i) => {
+      result[`city__${dest.name}`] = {
+        backgroundColor: RANK_COLORS[i] ?? "#94a3b8",
+        color: "#fff",
+        borderRadius: "6px",
+        fontWeight: 700,
+      };
+    });
+    return result;
+  }, [destinations]);
 
   const [optimizing, setOptimizing] = useState(false);
   const [isOptimized, setIsOptimized] = useState(false);
@@ -1660,6 +1747,85 @@ function StepDatesAndBudget({
               </Reorder.Item>
             ))}
           </Reorder.Group>
+          {/* ── Day allocation ── */}
+          {tripDays > 0 && (
+            <div style={{
+              borderTop: isDarkMode ? "1px solid rgba(255,255,255,0.07)" : "1px solid rgba(168,207,223,0.25)",
+              paddingTop: 10, display: "flex", flexDirection: "column", gap: 8,
+            }}>
+              <div style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em" }}>
+                Day Distribution
+              </div>
+
+              {/* Mode toggle */}
+              <div style={{ display: "flex", borderRadius: 10, overflow: "hidden", border: isDarkMode ? "1px solid rgba(255,255,255,0.12)" : "1px solid rgba(168,207,223,0.35)" }}>
+                {[
+                  { id: true,  label: "✨ Agent decides" },
+                  { id: false, label: "📅 My schedule" },
+                ].map(({ id, label }) => (
+                  <button key={String(id)} type="button" onClick={() => setAutoDistribute(id)} style={{
+                    flex: 1, padding: "8px 6px",
+                    background: autoDistribute === id ? "var(--cal-accent)" : "transparent",
+                    color: autoDistribute === id ? "#fff" : isDarkMode ? "rgba(255,255,255,0.5)" : "rgba(100,120,140,0.7)",
+                    border: "none", cursor: "pointer",
+                    fontSize: "0.82rem", fontWeight: 700,
+                    fontFamily: '"Pixelify Sans", sans-serif',
+                    transition: "background 0.2s, color 0.2s",
+                  }}>{label}</button>
+                ))}
+              </div>
+
+              {autoDistribute ? (
+                <div style={{
+                  display: "flex", alignItems: "center", gap: 8, padding: "8px 12px",
+                  borderRadius: 9, fontSize: "0.8rem", color: "var(--text-muted)",
+                  background: isDarkMode ? "rgba(13,148,136,0.06)" : "rgba(13,148,136,0.05)",
+                  border: isDarkMode ? "1px solid rgba(13,148,136,0.2)" : "1px solid rgba(13,148,136,0.15)",
+                }}>
+                  <span style={{ fontSize: "1rem" }}>✨</span>
+                  <span>The agent will optimally distribute <strong style={{ color: "var(--white)" }}>{tripDays} night{tripDays !== 1 ? "s" : ""}</strong> across {destinations.length} cities.</span>
+                </div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {/* City palette — pick a city then paint days in the calendar */}
+                  <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+                    {destinations.map((dest, i) => {
+                      const isActive = activeCity === dest.name;
+                      const color = RANK_COLORS[i] ?? "#94a3b8";
+                      const count = dayAssignments.filter((c) => c === dest.name).length;
+                      return (
+                        <button key={dest.name} type="button" onClick={() => setActiveCity(dest.name)} style={{
+                          display: "flex", alignItems: "center", gap: 5,
+                          padding: "5px 10px 5px 8px", borderRadius: 20,
+                          background: isActive ? color : "transparent",
+                          border: `2px solid ${color}`,
+                          color: isActive ? "#fff" : (isDarkMode ? "rgba(255,255,255,0.78)" : "rgba(50,70,90,0.85)"),
+                          cursor: "pointer", fontWeight: 700, fontSize: "0.8rem",
+                          fontFamily: '"Pixelify Sans", sans-serif', transition: "all 0.15s",
+                        }}>
+                          <span style={{
+                            width: 8, height: 8, borderRadius: "50%", flexShrink: 0, display: "inline-block",
+                            background: isActive ? "rgba(255,255,255,0.85)" : color,
+                          }} />
+                          {dest.name}
+                          <span style={{
+                            marginLeft: 2, borderRadius: 20, padding: "1px 6px",
+                            background: isActive ? "rgba(255,255,255,0.2)" : `${color}30`,
+                            color: isActive ? "#fff" : color,
+                            fontSize: "0.68rem", fontWeight: 900,
+                          }}>{count}n</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
+                    Select a city, then <strong style={{ color: "var(--white)" }}>click or drag</strong> days in the calendar →
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           <AnimatePresence>
             {paceTooTight && (
               <motion.div
@@ -1846,16 +2012,39 @@ function StepDatesAndBudget({
           {dateRange?.from && (
             <div style={{ fontSize: "0.82rem", color: "var(--cal-accent)", fontWeight: 600 }}>
               📅 {formatDateRange(dateRange)}
+              {!autoDistribute && isMultiDestTrip && (
+                <span style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: 400, marginLeft: 8 }}>
+                  — click or drag to paint
+                </span>
+              )}
             </div>
           )}
-          <div className="calendar-picker" style={{
-            ...styles.calCard, background: inputBg, border: panelBorder,
-            padding: "8px 10px",
-          }}>
-            <DayPicker mode="range" selected={dateRange} onSelect={handleDateSelect}
-              month={calMonth} onMonthChange={setCalMonth}
-              disabled={{ before: new Date() }} showOutsideDays
-            />
+          <div
+            className="calendar-picker"
+            style={{ ...styles.calCard, background: inputBg, border: panelBorder, padding: "8px 10px" }}
+            onMouseDown={() => { if (!autoDistribute && isMultiDestTrip) isPainting.current = true; }}
+            onMouseUp={() => { isPainting.current = false; }}
+          >
+            {!autoDistribute && isMultiDestTrip && dateRange.from && dateRange.to ? (
+              <DayPicker
+                month={calMonth}
+                onMonthChange={setCalMonth}
+                disabled={[
+                  { before: dateRange.from },
+                  { after: new Date(dateRange.to.getTime() - 86400000) },
+                ]}
+                modifiers={cityModifiers}
+                modifiersStyles={cityModifierStyles}
+                onDayClick={assignDayToActiveCity}
+                onDayMouseEnter={(day) => { if (isPainting.current) assignDayToActiveCity(day); }}
+                showOutsideDays
+              />
+            ) : (
+              <DayPicker mode="range" selected={dateRange} onSelect={handleDateSelect}
+                month={calMonth} onMonthChange={setCalMonth}
+                disabled={{ before: new Date() }} showOutsideDays
+              />
+            )}
           </div>
         </div>
       </div>
