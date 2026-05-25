@@ -160,6 +160,8 @@ def _build_trip_plan_prompt(preferences: Dict[str, Any]) -> tuple[str, str]:
     """Build and return (instructions, user_input) for trip plan generation."""
     origin = preferences.get("origin", "")
     destination = preferences.get("destination", "")
+    destinations = preferences.get("destinations", [])  # multi-city list
+    is_multi_city = len(destinations) > 1
     start_date = preferences.get("start_date", "")
     end_date = preferences.get("end_date", "")
     budget = preferences.get("budget", 0)
@@ -251,6 +253,18 @@ def _build_trip_plan_prompt(preferences: Dict[str, Any]) -> tuple[str, str]:
     long_trip = nights > 7
     num_weeks = -(-nights // 7)  # ceiling division
 
+    # For multi-city trips, scale counts per city (min 2 each) and add city field to schema
+    num_cities = len(destinations) if is_multi_city else 1
+    city_field = ',"city":str' if is_multi_city else ""
+    hotels_schema = f'{{"name":str,"type":str,"stars":num,"price_per_night":num,"location":str,"why":str,"amenities":[str],"booking_url":str{city_field}}}'
+    activities_schema = f'{{"name":str,"category":str,"cost_per_person":num,"duration":str,"description":str,"best_time":str,"tags":[str],"booking_url":str{city_field}}}'
+    food_spots_schema = f'{{"name":str,"cuisine":str,"avg_price":str,"neighborhood":str,"popular_dish":str,"why_popular":str,"review_summary":str,"booking_url":str{city_field}}}'
+
+    hotels_count   = max(4, 2 * num_cities)
+    activities_count_short = max(6, 2 * num_cities)
+    activities_count_long  = max(8, 3 * num_cities)
+    food_count     = max(6, 2 * num_cities)
+
     if long_trip:
         schedule_schema = (
             '"weekly_plan":[{"week":num,"dates":str,"theme":str,"focus":str,'
@@ -258,8 +272,8 @@ def _build_trip_plan_prompt(preferences: Dict[str, Any]) -> tuple[str, str]:
             '"itinerary":[],'
         )
         counts_line = (
-            f"Counts: EXACTLY {num_weeks} weekly_plan entries (one per week), 4 hotels, "
-            "8 activities, 8 food_spots, 5 must_try_foods, 5 recommended_places. "
+            f"Counts: EXACTLY {num_weeks} weekly_plan entries (one per week), {hotels_count} hotels, "
+            f"{activities_count_long} activities, {food_count} food_spots, 5 must_try_foods, 5 recommended_places. "
         )
         weekly_instructions = (
             f"weekly_plan: {num_weeks} entries, one per week. "
@@ -277,17 +291,23 @@ def _build_trip_plan_prompt(preferences: Dict[str, Any]) -> tuple[str, str]:
             '"weekly_plan":[],'
         )
         counts_line = (
-            f"Counts: EXACTLY {nights} itinerary days, 4 hotels, 6 activities, 6 food_spots, "
+            f"Counts: EXACTLY {nights} itinerary days, {hotels_count} hotels, {activities_count_short} activities, {food_count} food_spots, "
             "5 must_try_foods, 5 recommended_places. "
         )
         weekly_instructions = ""
 
+    multi_city_instruction = (
+        f'MULTI-CITY TRIP: Distribute hotels, activities, and food_spots evenly across all {num_cities} cities: {", ".join(destinations)}. '
+        f'Each city must have roughly {hotels_count // num_cities} hotels, {activities_count_short // num_cities} activities, and {food_count // num_cities} food_spots. '
+        'Set the "city" field on every hotel, activity, and food_spot to exactly the city name it belongs to.\n'
+    ) if is_multi_city else ""
+
     parts = [
         "You are an expert travel planner. Output STRICT JSON only - no markdown fences, no extra text.\n",
-        'Schema: {"overview":str,"destination_highlights":str,',
-        '"hotels":[{"name":str,"type":str,"stars":num,"price_per_night":num,"location":str,"why":str,"amenities":[str],"booking_url":str}],',
-        '"activities":[{"name":str,"category":str,"cost_per_person":num,"duration":str,"description":str,"best_time":str,"tags":[str],"booking_url":str}],',
-        '"food_spots":[{"name":str,"cuisine":str,"avg_price":str,"neighborhood":str,"popular_dish":str,"why_popular":str,"review_summary":str,"booking_url":str}],',
+        f'Schema: {{"overview":str,"destination_highlights":str,',
+        f'"hotels":[{hotels_schema}],',
+        f'"activities":[{activities_schema}],',
+        f'"food_spots":[{food_spots_schema}],',
         schedule_schema,
         '"budget_breakdown":{"hotels_total":num,"activities_total":num,"food_total":num,',
         '"transport_total":num,',
@@ -298,6 +318,7 @@ def _build_trip_plan_prompt(preferences: Dict[str, Any]) -> tuple[str, str]:
         '"local_tips":[str],"recommended_places":[{"name":str,"category":str,"why":str,"neighborhood":str}],',
         '"must_try_foods":[{"type":str,"dish":str}],"weather_note":str,"currency_note":str}\n',
         counts_line,
+        multi_city_instruction,
         "Real place names. All prices in user's currency. Be concise.\n",
         "Hotels: realistic rates incl. taxes. Major cities mid-range 180-400+/night. hotels_total = price_per_night x nights.\n",
         "food_spots.avg_price: '~CAD 18-30/person'. popular_dish: one dish. why_popular: 1-2 sentences. review_summary: one line.\n",

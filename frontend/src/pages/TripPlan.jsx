@@ -211,9 +211,9 @@ export default function TripPlan() {
               style={{ width: "100%" }}
             >
               {activeTab === "Overview"    && <TabOverview plan={plan} prefs={prefs} />}
-              {activeTab === "Hotels"      && <TabHotels hotels={plan.hotels || []} currency={prefs?.currency} />}
-              {activeTab === "Experiences"  && <TabActivities activities={plan.activities || []} currency={prefs?.currency} />}
-              {activeTab === "Food"        && <TabFood foodSpots={plan.food_spots || []} destination={prefs?.destination} />}
+              {activeTab === "Hotels"      && <TabHotels hotels={plan.hotels || []} currency={prefs?.currency} cities={prefs?.destinations} />}
+              {activeTab === "Experiences"  && <TabActivities activities={plan.activities || []} currency={prefs?.currency} cities={prefs?.destinations} />}
+              {activeTab === "Food"        && <TabFood foodSpots={plan.food_spots || []} destination={prefs?.destination} cities={prefs?.destinations} />}
               {activeTab === "Transportation" && <TabTransportation options={plan.transportation_options || []} currency={prefs?.currency} origin={prefs?.origin} destination={prefs?.destination} overrideNote={plan._transport_override} groupSize={prefs?.group_size ?? 1} />}
               {activeTab === "Itinerary"   && <TabItinerary itinerary={plan.itinerary || []} currency={prefs?.currency} />}
               {activeTab === "Weekly Plan" && <TabWeeklyPlan weeklyPlan={plan.weekly_plan || []} destination={prefs?.destination} />}
@@ -370,136 +370,196 @@ function ResourceLink({ href, label = "Open link" }) {
 }
 
 // ─── Hotels Tab ───────────────────────────────────────────────────────────────
-function TabHotels({ hotels, currency }) {
+function groupByCity(items, cities) {
+  if (!cities?.length) return null;
+  const groups = {};
+  cities.forEach((c) => { groups[c] = []; });
+  items.forEach((item) => {
+    const city = item.city;
+    if (city && groups[city]) groups[city].push(item);
+    else if (city) { groups[city] = [item]; }
+    else groups[cities[0]].push(item); // fallback
+  });
+  return Object.entries(groups).filter(([, v]) => v.length > 0);
+}
+
+function CityHeader({ name }) {
+  return (
+    <div style={{
+      display: "flex", alignItems: "center", gap: 10,
+      margin: "8px 0 4px", paddingBottom: 8,
+      borderBottom: "1px solid var(--border-col)",
+    }}>
+      <span style={{ fontSize: "1.1rem" }}>📍</span>
+      <span style={{
+        fontFamily: '"Pixelify Sans", sans-serif',
+        fontSize: "1.05rem", fontWeight: 700,
+        color: "var(--cal-accent)",
+      }}>{name}</span>
+    </div>
+  );
+}
+
+function TabHotels({ hotels, currency, cities }) {
   if (!hotels.length) return <EmptyState>No hotel recommendations available.</EmptyState>;
+  const groups = groupByCity(hotels, cities);
+  const renderHotel = (h, i) => (
+    <Card key={i}>
+      <div style={styles.hotelHeader}>
+        <div>
+          <div style={styles.hotelName}>{h.name}</div>
+          <div style={styles.hotelType}>{h.type}</div>
+        </div>
+        <div style={styles.priceTag}>
+          <div style={styles.priceAmount}>{currency} {h.price_per_night?.toLocaleString?.() ?? h.price_per_night}</div>
+          <div style={styles.priceLabel}>/ night</div>
+        </div>
+      </div>
+      {h.stars && <Stars count={h.stars} />}
+      <div style={styles.hotelLocation}>📍 {h.location}</div>
+      <p style={styles.hotelWhy}>{h.why}</p>
+      <div style={{ marginTop: 10 }}>
+        <ResourceLink href={buildSearchUrl(h.name, h.location)} label="Find on Maps" />
+      </div>
+      {h.amenities?.length > 0 && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
+          {h.amenities.map((a, j) => <Pill key={j} small>{a}</Pill>)}
+        </div>
+      )}
+    </Card>
+  );
   return (
     <div style={styles.tabContent}>
-      {hotels.map((h, i) => (
-        <Card key={i}>
-          <div style={styles.hotelHeader}>
-            <div>
-              <div style={styles.hotelName}>{h.name}</div>
-              <div style={styles.hotelType}>{h.type}</div>
+      {groups
+        ? groups.map(([city, items]) => (
+            <div key={city}>
+              <CityHeader name={city} />
+              {items.map(renderHotel)}
             </div>
-            <div style={styles.priceTag}>
-              <div style={styles.priceAmount}>{currency} {h.price_per_night?.toLocaleString?.() ?? h.price_per_night}</div>
-              <div style={styles.priceLabel}>/ night</div>
-            </div>
-          </div>
-          {h.stars && <Stars count={h.stars} />}
-          <div style={styles.hotelLocation}>📍 {h.location}</div>
-          <p style={styles.hotelWhy}>{h.why}</p>
-          <div style={{ marginTop: 10 }}>
-            <ResourceLink href={buildSearchUrl(h.name, h.location)} label="Find on Maps" />
-          </div>
-          {h.amenities?.length > 0 && (
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
-              {h.amenities.map((a, j) => <Pill key={j} small>{a}</Pill>)}
-            </div>
-          )}
-        </Card>
-      ))}
+          ))
+        : hotels.map(renderHotel)}
     </div>
   );
 }
 
 // ─── Activities Tab ───────────────────────────────────────────────────────────
-function TabActivities({ activities, currency }) {
+function TabActivities({ activities, currency, cities }) {
   if (!activities.length) return <EmptyState>No activities available.</EmptyState>;
+  const groups = groupByCity(activities, cities);
+  const renderActivity = (a, i) => (
+    <Card key={i}>
+      <div style={styles.activityHeader}>
+        <div style={styles.activityName}>{a.name}</div>
+        <Pill accent>{a.category}</Pill>
+      </div>
+      <p style={styles.activityDesc}>{a.description}</p>
+      <div style={styles.activityMeta}>
+        <span>⏱️ {a.duration}</span>
+        <span>💰 {a.cost_per_person > 0 ? `${currency} ${a.cost_per_person?.toLocaleString?.() ?? a.cost_per_person} / person` : "Free"}</span>
+        <span>🕐 Best: {a.best_time}</span>
+      </div>
+      <div style={{ marginTop: 10 }}>
+        <ResourceLink href={buildSearchUrl(a.name)} label="Find on Maps" />
+      </div>
+      {a.tags?.length > 0 && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
+          {a.tags.map((t, j) => <Pill key={j} small>{t}</Pill>)}
+        </div>
+      )}
+    </Card>
+  );
   return (
     <div style={styles.tabContent}>
-      {activities.map((a, i) => (
-        <Card key={i}>
-          <div style={styles.activityHeader}>
-            <div style={styles.activityName}>{a.name}</div>
-            <Pill accent>{a.category}</Pill>
-          </div>
-          <p style={styles.activityDesc}>{a.description}</p>
-          <div style={styles.activityMeta}>
-            <span>⏱️ {a.duration}</span>
-            <span>💰 {a.cost_per_person > 0 ? `${currency} ${a.cost_per_person?.toLocaleString?.() ?? a.cost_per_person} / person` : "Free"}</span>
-            <span>🕐 Best: {a.best_time}</span>
-          </div>
-          <div style={{ marginTop: 10 }}>
-            <ResourceLink href={buildSearchUrl(a.name)} label="Find on Maps" />
-          </div>
-          {a.tags?.length > 0 && (
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
-              {a.tags.map((t, j) => <Pill key={j} small>{t}</Pill>)}
+      {groups
+        ? groups.map(([city, items]) => (
+            <div key={city}>
+              <CityHeader name={city} />
+              {items.map(renderActivity)}
             </div>
-          )}
-        </Card>
-      ))}
+          ))
+        : activities.map(renderActivity)}
     </div>
   );
 }
 
 
 // ─── Food Tab ─────────────────────────────────────────────────────────────────
-function TabFood({ foodSpots, destination }) {
+function TabFood({ foodSpots, destination, cities }) {
   if (!foodSpots.length) return <EmptyState>No food recommendations available.</EmptyState>;
+
+  const renderFoodSpot = (spot, i) => {
+    const price = spot.avg_price || spot.price_level || null;
+    const mapsUrl = buildSearchUrl(spot.name, spot.neighborhood || destination);
+    return (
+      <Card key={i}>
+        {/* Name + price */}
+        <div style={styles.activityHeader}>
+          <div style={styles.activityName}>{spot.name}</div>
+          {price && (
+            <span style={{
+              fontSize: "0.78rem", fontWeight: 700, color: "#0d9488",
+              whiteSpace: "nowrap", background: "rgba(13,148,136,0.12)",
+              border: "1px solid rgba(13,148,136,0.28)",
+              borderRadius: 999, padding: "3px 10px", flexShrink: 0,
+            }}>
+              {price}
+            </span>
+          )}
+        </div>
+
+        {/* Popular dish highlight */}
+        {spot.popular_dish && (
+          <div style={{
+            display: "inline-flex", alignItems: "center", gap: 6,
+            margin: "6px 0 10px",
+            padding: "5px 12px", borderRadius: 8,
+            background: "rgba(139,92,246,0.1)",
+            border: "1px solid rgba(139,92,246,0.25)",
+          }}>
+            <span style={{ fontSize: "0.78rem", color: "rgba(167,139,250,0.7)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Must Order</span>
+            <span style={{ fontSize: "0.88rem", fontWeight: 700, color: "#a78bfa" }}>🍴 {spot.popular_dish}</span>
+          </div>
+        )}
+
+        {/* Description */}
+        <p style={styles.activityDesc}>{spot.why_popular}</p>
+
+        {/* Critic quote */}
+        {spot.review_summary && (
+          <p style={{
+            margin: "8px 0 12px", fontStyle: "italic",
+            fontSize: "0.84rem", color: "var(--text-secondary)",
+            borderLeft: "2px solid rgba(13,148,136,0.45)", paddingLeft: 10,
+          }}>
+            "{spot.review_summary}"
+          </p>
+        )}
+
+        {/* Meta row */}
+        <div style={styles.activityMeta}>
+          <span>🍽️ {spot.cuisine}</span>
+          <span>📍 {spot.neighborhood}</span>
+        </div>
+
+        <div style={{ marginTop: 10 }}>
+          <ResourceLink href={mapsUrl} label="Find on Maps" />
+        </div>
+      </Card>
+    );
+  };
+
+  const groups = groupByCity(foodSpots, cities);
+
   return (
     <div style={styles.tabContent}>
-      {foodSpots.map((spot, i) => {
-        const price = spot.avg_price || spot.price_level || null;
-        const mapsUrl = buildSearchUrl(spot.name, spot.neighborhood || destination);
-        return (
-          <Card key={i}>
-            {/* Name + price */}
-            <div style={styles.activityHeader}>
-              <div style={styles.activityName}>{spot.name}</div>
-              {price && (
-                <span style={{
-                  fontSize: "0.78rem", fontWeight: 700, color: "#0d9488",
-                  whiteSpace: "nowrap", background: "rgba(13,148,136,0.12)",
-                  border: "1px solid rgba(13,148,136,0.28)",
-                  borderRadius: 999, padding: "3px 10px", flexShrink: 0,
-                }}>
-                  {price}
-                </span>
-              )}
+      {groups
+        ? groups.map(([city, items]) => (
+            <div key={city}>
+              <CityHeader name={city} />
+              {items.map(renderFoodSpot)}
             </div>
-
-            {/* Popular dish highlight */}
-            {spot.popular_dish && (
-              <div style={{
-                display: "inline-flex", alignItems: "center", gap: 6,
-                margin: "6px 0 10px",
-                padding: "5px 12px", borderRadius: 8,
-                background: "rgba(139,92,246,0.1)",
-                border: "1px solid rgba(139,92,246,0.25)",
-              }}>
-                <span style={{ fontSize: "0.78rem", color: "rgba(167,139,250,0.7)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Must Order</span>
-                <span style={{ fontSize: "0.88rem", fontWeight: 700, color: "#a78bfa" }}>🍴 {spot.popular_dish}</span>
-              </div>
-            )}
-
-            {/* Description */}
-            <p style={styles.activityDesc}>{spot.why_popular}</p>
-
-            {/* Critic quote */}
-            {spot.review_summary && (
-              <p style={{
-                margin: "8px 0 12px", fontStyle: "italic",
-                fontSize: "0.84rem", color: "var(--text-secondary)",
-                borderLeft: "2px solid rgba(13,148,136,0.45)", paddingLeft: 10,
-              }}>
-                "{spot.review_summary}"
-              </p>
-            )}
-
-            {/* Meta row */}
-            <div style={styles.activityMeta}>
-              <span>🍽️ {spot.cuisine}</span>
-              <span>📍 {spot.neighborhood}</span>
-            </div>
-
-            <div style={{ marginTop: 10 }}>
-              <ResourceLink href={mapsUrl} label="Find on Maps" />
-            </div>
-          </Card>
-        );
-      })}
+          ))
+        : foodSpots.map(renderFoodSpot)}
     </div>
   );
 }

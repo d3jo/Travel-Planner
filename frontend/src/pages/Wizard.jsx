@@ -644,30 +644,37 @@ function MapPhase({ onConfirm, initialIsMultiDest = false, initialMultiDests = [
             city.tier === 1 ||
             (city.tier === 2 && position.zoom >= 2.8) ||
             (city.tier === 3 && position.zoom >= 4.5)
-          ).map((city) => (
-            <MapMarker key={city.name} coordinates={[city.coords[1], city.coords[0]]}
-              onClick={() => {
-                if (isMultiDest) {
-                  toggleMultiDestItem({ name: city.name, coords: city.coords, type: "city" });
-                } else {
-                  onConfirm({ name: city.name, coords: city.coords });
-                }
-              }}
-              style={{ cursor: "pointer" }}
-            >
-              <title>{city.name}</title>
-              <circle r={2.6 / position.zoom} fill={cityPingColor} fillOpacity={0.92} />
-              <circle r={5.2 / position.zoom} fill={cityPingColor} fillOpacity={isDarkMode ? 0.2 : 0.3} />
-              {position.zoom >= 2.2 && (
-                <text y={-(isMobile ? 22 : 7) / position.zoom} textAnchor="middle" style={{
-                  fontFamily: '"Pixelify Sans", sans-serif',
-                  fontSize: `${(isMobile ? 22 : 10) / position.zoom}px`,
-                  fill: isDarkMode ? "rgba(255,255,255,0.8)" : "rgba(51,68,85,0.85)",
-                  fontWeight: 700, pointerEvents: "none", userSelect: "none",
-                }}>{city.name}</text>
-              )}
-            </MapMarker>
-          ))}
+          ).map((city) => {
+            // Labels appear at different zoom thresholds per tier to avoid crowding
+            const showLabel =
+              (city.tier === 1 && position.zoom >= 2.2) ||
+              (city.tier === 2 && position.zoom >= 3.5) ||
+              (city.tier === 3 && position.zoom >= 6.0);
+            return (
+              <MapMarker key={city.name} coordinates={[city.coords[1], city.coords[0]]}
+                onClick={() => {
+                  if (isMultiDest) {
+                    toggleMultiDestItem({ name: city.name, coords: city.coords, type: "city" });
+                  } else {
+                    onConfirm({ name: city.name, coords: city.coords });
+                  }
+                }}
+                style={{ cursor: "pointer" }}
+              >
+                <title>{city.name}</title>
+                <circle r={2.6 / position.zoom} fill={cityPingColor} fillOpacity={0.92} />
+                <circle r={5.2 / position.zoom} fill={cityPingColor} fillOpacity={isDarkMode ? 0.2 : 0.3} />
+                {showLabel && (
+                  <text y={-(isMobile ? 22 : 7) / position.zoom} textAnchor="middle" style={{
+                    fontFamily: '"Pixelify Sans", sans-serif',
+                    fontSize: `${(isMobile ? 22 : 10) / position.zoom}px`,
+                    fill: isDarkMode ? "rgba(255,255,255,0.8)" : "rgba(51,68,85,0.85)",
+                    fontWeight: 700, pointerEvents: "none", userSelect: "none",
+                  }}>{city.name}</text>
+                )}
+              </MapMarker>
+            );
+          })}
 
           {!isMultiDest && selected && (
             <MapMarker coordinates={[selected.coords[1], selected.coords[0]]}>
