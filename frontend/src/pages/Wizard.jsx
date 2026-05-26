@@ -1747,116 +1747,6 @@ function StepDatesAndBudget({
               </Reorder.Item>
             ))}
           </Reorder.Group>
-          {/* ── Day allocation ── */}
-          {tripDays > 0 && (
-            <div style={{
-              borderTop: isDarkMode ? "1px solid rgba(255,255,255,0.07)" : "1px solid rgba(168,207,223,0.25)",
-              paddingTop: 10, display: "flex", flexDirection: "column", gap: 8,
-            }}>
-              <div style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em" }}>
-                Day Distribution
-              </div>
-
-              {/* Mode toggle */}
-              <div style={{ display: "flex", borderRadius: 10, overflow: "hidden", border: isDarkMode ? "1px solid rgba(255,255,255,0.12)" : "1px solid rgba(168,207,223,0.35)" }}>
-                {[
-                  { id: true,  label: "✨ Agent decides" },
-                  { id: false, label: "📅 My schedule" },
-                ].map(({ id, label }) => (
-                  <button key={String(id)} type="button" onClick={() => setAutoDistribute(id)} style={{
-                    flex: 1, padding: "8px 6px",
-                    background: autoDistribute === id ? "var(--cal-accent)" : "transparent",
-                    color: autoDistribute === id ? "#fff" : isDarkMode ? "rgba(255,255,255,0.5)" : "rgba(100,120,140,0.7)",
-                    border: "none", cursor: "pointer",
-                    fontSize: "0.82rem", fontWeight: 700,
-                    fontFamily: '"Pixelify Sans", sans-serif',
-                    transition: "background 0.2s, color 0.2s",
-                  }}>{label}</button>
-                ))}
-              </div>
-
-              {autoDistribute ? (
-                <div style={{
-                  display: "flex", alignItems: "center", gap: 8, padding: "8px 12px",
-                  borderRadius: 9, fontSize: "0.8rem", color: "var(--text-muted)",
-                  background: isDarkMode ? "rgba(13,148,136,0.06)" : "rgba(13,148,136,0.05)",
-                  border: isDarkMode ? "1px solid rgba(13,148,136,0.2)" : "1px solid rgba(13,148,136,0.15)",
-                }}>
-                  <span style={{ fontSize: "1rem" }}>✨</span>
-                  <span>The agent will optimally distribute <strong style={{ color: "var(--white)" }}>{tripDays} night{tripDays !== 1 ? "s" : ""}</strong> across {destinations.length} cities.</span>
-                </div>
-              ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                  {/* City palette — pick a city then paint days in the calendar */}
-                  <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
-                    {destinations.map((dest, i) => {
-                      const isActive = activeCity === dest.name;
-                      const color = RANK_COLORS[i] ?? "#94a3b8";
-                      const count = dayAssignments.filter((c) => c === dest.name).length;
-                      return (
-                        <button key={dest.name} type="button" onClick={() => setActiveCity(dest.name)} style={{
-                          display: "flex", alignItems: "center", gap: 5,
-                          padding: "5px 10px 5px 8px", borderRadius: 20,
-                          background: isActive ? color : "transparent",
-                          border: `2px solid ${color}`,
-                          color: isActive ? "#fff" : (isDarkMode ? "rgba(255,255,255,0.78)" : "rgba(50,70,90,0.85)"),
-                          cursor: "pointer", fontWeight: 700, fontSize: "0.8rem",
-                          fontFamily: '"Pixelify Sans", sans-serif', transition: "all 0.15s",
-                        }}>
-                          <span style={{
-                            width: 8, height: 8, borderRadius: "50%", flexShrink: 0, display: "inline-block",
-                            background: isActive ? "rgba(255,255,255,0.85)" : color,
-                          }} />
-                          {dest.name}
-                          <span style={{
-                            marginLeft: 2, borderRadius: 20, padding: "1px 6px",
-                            background: isActive ? "rgba(255,255,255,0.2)" : `${color}30`,
-                            color: isActive ? "#fff" : color,
-                            fontSize: "0.68rem", fontWeight: 900,
-                          }}>{count}n</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <div style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
-                    Select a city, then <strong style={{ color: "var(--white)" }}>click or drag</strong> days in the calendar →
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          <AnimatePresence>
-            {paceTooTight && (
-              <motion.div
-                key="pace-warn"
-                initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
-                transition={{ duration: 0.2 }}
-                style={{
-                  display: "flex", alignItems: "flex-start", gap: 8,
-                  padding: "9px 12px", borderRadius: 9,
-                  background: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.3)",
-                }}
-              >
-                <span style={{ fontSize: "0.85rem", flexShrink: 0, marginTop: 1 }}>⚠️</span>
-                <span style={{ fontSize: "0.78rem", color: "var(--text-muted)", lineHeight: 1.55 }}>
-                  <span style={{ fontWeight: 700, color: "#f59e0b" }}>
-                    {tripDays} day{tripDays !== 1 ? "s" : ""} for {destinations.length} cities is too rushed.
-                  </span>{" "}
-                  Recommend at least{" "}
-                  <span style={{ fontWeight: 700, color: "var(--white)" }}>
-                    {destinations.length * minDaysPerCity} days
-                  </span>{" "}
-                  ({destinations.length} × {minDaysPerCity} min), ideally{" "}
-                  <span style={{ fontWeight: 700, color: "var(--white)" }}>
-                    {destinations.length * idealDaysPerCity} days
-                  </span>{" "}
-                  ({destinations.length} × {idealDaysPerCity} days per city).
-                </span>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
           <div style={{ fontSize: "0.76rem", color: "var(--text-muted)", marginTop: -2 }}>
             Optimize finds the shortest route from your departure city.
           </div>
@@ -2046,6 +1936,116 @@ function StepDatesAndBudget({
               />
             )}
           </div>
+
+          {/* ── Day Distribution — lives under the calendar for spatial coordination ── */}
+          {isMultiDestTrip && tripDays > 0 && (
+            <div style={{
+              borderTop: isDarkMode ? "1px solid rgba(255,255,255,0.07)" : "1px solid rgba(168,207,223,0.25)",
+              paddingTop: 10, display: "flex", flexDirection: "column", gap: 8,
+            }}>
+              <div style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.07em" }}>
+                Day Distribution
+              </div>
+
+              {/* Mode toggle */}
+              <div style={{ display: "flex", borderRadius: 10, overflow: "hidden", border: isDarkMode ? "1px solid rgba(255,255,255,0.12)" : "1px solid rgba(168,207,223,0.35)" }}>
+                {[
+                  { id: true,  label: "✨ Agent decides" },
+                  { id: false, label: "📅 My schedule" },
+                ].map(({ id, label }) => (
+                  <button key={String(id)} type="button" onClick={() => setAutoDistribute(id)} style={{
+                    flex: 1, padding: "8px 6px",
+                    background: autoDistribute === id ? "var(--cal-accent)" : "transparent",
+                    color: autoDistribute === id ? "#fff" : isDarkMode ? "rgba(255,255,255,0.5)" : "rgba(100,120,140,0.7)",
+                    border: "none", cursor: "pointer",
+                    fontSize: "0.82rem", fontWeight: 700,
+                    fontFamily: '"Pixelify Sans", sans-serif',
+                    transition: "background 0.2s, color 0.2s",
+                  }}>{label}</button>
+                ))}
+              </div>
+
+              {autoDistribute ? (
+                <div style={{
+                  display: "flex", alignItems: "center", gap: 8, padding: "8px 12px",
+                  borderRadius: 9, fontSize: "0.8rem", color: "var(--text-muted)",
+                  background: isDarkMode ? "rgba(13,148,136,0.06)" : "rgba(13,148,136,0.05)",
+                  border: isDarkMode ? "1px solid rgba(13,148,136,0.2)" : "1px solid rgba(13,148,136,0.15)",
+                }}>
+                  <span style={{ fontSize: "1rem" }}>✨</span>
+                  <span>The agent will optimally distribute <strong style={{ color: "var(--white)" }}>{tripDays} night{tripDays !== 1 ? "s" : ""}</strong> across {destinations.length} cities.</span>
+                </div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {/* City palette — pick a city then paint days in the calendar above */}
+                  <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+                    {destinations.map((dest, i) => {
+                      const isActive = activeCity === dest.name;
+                      const color = RANK_COLORS[i] ?? "#94a3b8";
+                      const count = dayAssignments.filter((c) => c === dest.name).length;
+                      return (
+                        <button key={dest.name} type="button" onClick={() => setActiveCity(dest.name)} style={{
+                          display: "flex", alignItems: "center", gap: 5,
+                          padding: "5px 10px 5px 8px", borderRadius: 20,
+                          background: isActive ? color : "transparent",
+                          border: `2px solid ${color}`,
+                          color: isActive ? "#fff" : (isDarkMode ? "rgba(255,255,255,0.78)" : "rgba(50,70,90,0.85)"),
+                          cursor: "pointer", fontWeight: 700, fontSize: "0.8rem",
+                          fontFamily: '"Pixelify Sans", sans-serif', transition: "all 0.15s",
+                        }}>
+                          <span style={{
+                            width: 8, height: 8, borderRadius: "50%", flexShrink: 0, display: "inline-block",
+                            background: isActive ? "rgba(255,255,255,0.85)" : color,
+                          }} />
+                          {dest.name}
+                          <span style={{
+                            marginLeft: 2, borderRadius: 20, padding: "1px 6px",
+                            background: isActive ? "rgba(255,255,255,0.2)" : `${color}30`,
+                            color: isActive ? "#fff" : color,
+                            fontSize: "0.68rem", fontWeight: 900,
+                          }}>{count}n</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
+                    Select a city, then <strong style={{ color: "var(--white)" }}>click or drag</strong> days in the calendar above
+                  </div>
+                </div>
+              )}
+
+              <AnimatePresence>
+                {paceTooTight && (
+                  <motion.div
+                    key="pace-warn"
+                    initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
+                    transition={{ duration: 0.2 }}
+                    style={{
+                      display: "flex", alignItems: "flex-start", gap: 8,
+                      padding: "9px 12px", borderRadius: 9,
+                      background: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.3)",
+                    }}
+                  >
+                    <span style={{ fontSize: "0.85rem", flexShrink: 0, marginTop: 1 }}>⚠️</span>
+                    <span style={{ fontSize: "0.78rem", color: "var(--text-muted)", lineHeight: 1.55 }}>
+                      <span style={{ fontWeight: 700, color: "#f59e0b" }}>
+                        {tripDays} day{tripDays !== 1 ? "s" : ""} for {destinations.length} cities is too rushed.
+                      </span>{" "}
+                      Recommend at least{" "}
+                      <span style={{ fontWeight: 700, color: "var(--white)" }}>
+                        {destinations.length * minDaysPerCity} days
+                      </span>{" "}
+                      ({destinations.length} × {minDaysPerCity} min), ideally{" "}
+                      <span style={{ fontWeight: 700, color: "var(--white)" }}>
+                        {destinations.length * idealDaysPerCity} days
+                      </span>{" "}
+                      ({destinations.length} × {idealDaysPerCity} days per city).
+                    </span>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          )}
         </div>
       </div>
     </div>
