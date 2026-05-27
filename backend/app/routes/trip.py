@@ -28,6 +28,7 @@ class TripPreferences(BaseModel):
     group_size: int = 1
     budget_type: str = "total"
     transport_mode: str = "flight"
+    accommodation_type: str = "hotel"
     additional_notes: Optional[str] = None
 
 

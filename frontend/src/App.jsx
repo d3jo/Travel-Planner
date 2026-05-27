@@ -18,6 +18,7 @@ function AnimatedRoutes() {
         <Routes location={location} key={location.pathname}>
           <Route path="/" element={<PageTransition><Wizard /></PageTransition>} />
           <Route path="/plan" element={<PageTransition><TripPlan /></PageTransition>} />
+          <Route path="/shared/:token" element={<PageTransition><TripPlan /></PageTransition>} />
           <Route path="/auth" element={<PageTransition><Auth /></PageTransition>} />
           <Route path="/my-trips" element={<PageTransition><MyTrips /></PageTransition>} />
           <Route path="*" element={<Navigate to="/" replace />} />

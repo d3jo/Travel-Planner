@@ -1,14 +1,16 @@
-import { useState, useCallback } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useState, useCallback, useEffect, useRef } from "react";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useIsDarkMode } from "../contexts/ThemeContext";
 import { useAuth } from "../contexts/AuthContext";
 import { useIsMobile } from "../hooks/useIsMobile";
 import api from "../api";
 
-function getTabs(nights) {
+const ACCOMMODATION_TAB_LABELS = { hotel: "Hotels", airbnb: "Stays", hostel: "Hostels", mixed: "Stays" };
+
+function getTabs(nights, hotelLabel = "Hotels") {
   const scheduleTab = nights > 7 ? "Weekly Plan" : "Itinerary";
-  return ["Overview", "Hotels", "Experiences", "Food", "Transportation", scheduleTab, "Budget"];
+  return ["Overview", hotelLabel, "Experiences", "Food", "Transportation", scheduleTab, "Budget"];
 }
 
 // Inject custom scrollbar styles once
@@ -51,10 +53,31 @@ const scrollbarCSS = `
 export default function TripPlan() {
   const loc = useLocation();
   const nav = useNavigate();
-  const plan = loc.state?.plan;
+  const { token } = useParams();
+  const isSharedView = !!token;
+
+  const locPlan = loc.state?.plan;
+  const locPrefs = loc.state?.preferences;
+
+  const [sharedPlan, setSharedPlan] = useState(null);
+  const [sharedPrefs, setSharedPrefs] = useState(null);
+  const [sharedLoading, setSharedLoading] = useState(isSharedView);
+  const [sharedError, setSharedError] = useState("");
+
+  useEffect(() => {
+    if (!token) return;
+    setSharedLoading(true);
+    api.get(`/shared/${token}`)
+      .then(res => { setSharedPlan(res.data.plan); setSharedPrefs(res.data.prefs); })
+      .catch(() => setSharedError("This trip link is invalid or has expired."))
+      .finally(() => setSharedLoading(false));
+  }, [token]);
+
+  const plan = isSharedView ? sharedPlan : locPlan;
+  const prefs = isSharedView ? sharedPrefs : locPrefs;
+
   const isDarkMode = useIsDarkMode();
   const isMobile = useIsMobile();
-  const prefs = loc.state?.preferences;
 
   const nights = (() => {
     try {
@@ -63,35 +86,104 @@ export default function TripPlan() {
       return Math.max(1, Math.round((d2 - d1) / 86400000));
     } catch { return 1; }
   })();
-  const TABS = getTabs(nights);
+  const hotelTabLabel = ACCOMMODATION_TAB_LABELS[prefs?.accommodation_type] || "Hotels";
+  const TABS = getTabs(nights, hotelTabLabel);
   const [activeTab, setActiveTab] = useState("Overview");
   const { isLoggedIn } = useAuth();
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [savedTripId, setSavedTripId] = useState(null);
   const [saveErr, setSaveErr] = useState("");
+  const [sharing, setSharing] = useState(false);
+  const [shareUrl, setShareUrl] = useState("");
+  const [showSharePopover, setShowSharePopover] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const sharePopoverRef = useRef(null);
+  const shareBtnRef = useRef(null);
+
+  useEffect(() => {
+    if (!showSharePopover) return;
+    function handleClick(e) {
+      if (
+        sharePopoverRef.current && !sharePopoverRef.current.contains(e.target) &&
+        shareBtnRef.current && !shareBtnRef.current.contains(e.target)
+      ) {
+        setShowSharePopover(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [showSharePopover]);
+
+  async function doSave() {
+    const dest = prefs?.destination || "Trip";
+    const origin = prefs?.origin || "";
+    const res = await api.post("/trips", {
+      title: `${origin ? origin + " → " : ""}${dest}`,
+      origin,
+      destination: dest,
+      start_date: prefs?.start_date || "",
+      end_date: prefs?.end_date || "",
+      plan,
+      prefs: prefs || {},
+    });
+    setSavedTripId(res.data.id);
+    setSaved(true);
+    return res.data.id;
+  }
 
   async function handleSave() {
     if (!isLoggedIn) { nav("/auth"); return; }
     setSaving(true);
     setSaveErr("");
     try {
-      const dest = prefs?.destination || "Trip";
-      const origin = prefs?.origin || "";
-      await api.post("/trips", {
-        title: `${origin ? origin + " → " : ""}${dest}`,
-        origin: origin,
-        destination: dest,
-        start_date: prefs?.start_date || "",
-        end_date: prefs?.end_date || "",
-        plan: plan,
-        prefs: prefs || {},
-      });
-      setSaved(true);
+      await doSave();
     } catch (e) {
       setSaveErr(e?.response?.data?.detail || "Failed to save trip.");
     } finally {
       setSaving(false);
     }
+  }
+
+  async function handleShare() {
+    if (!isLoggedIn) { nav("/auth"); return; }
+    setSharing(true);
+    try {
+      let tripId = savedTripId;
+      if (!tripId) {
+        tripId = await doSave();
+      }
+      const res = await api.post(`/trips/${tripId}/share`);
+      setShareUrl(`${window.location.origin}/shared/${res.data.share_token}`);
+      setShowSharePopover(true);
+    } catch {
+      // silently fail — share button returns to normal
+    } finally {
+      setSharing(false);
+    }
+  }
+
+  async function handleCopyLink() {
+    try { await navigator.clipboard.writeText(shareUrl); } catch { /* ignore */ }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  if (isSharedView && sharedLoading) {
+    return (
+      <div style={styles.empty}>
+        <div style={{ ...styles.emptyText, fontSize: "1rem", opacity: 0.6 }}>Loading trip…</div>
+      </div>
+    );
+  }
+
+  if (isSharedView && sharedError) {
+    return (
+      <div style={styles.empty}>
+        <div style={styles.emptyText}>{sharedError}</div>
+        <button style={styles.backBtn} onClick={() => nav("/")}>← Plan a New Trip</button>
+      </div>
+    );
   }
 
   if (!plan) {
@@ -113,27 +205,139 @@ export default function TripPlan() {
           <motion.div initial={{ opacity: 0, y: -16 }} animate={{ opacity: 1, y: 0 }} style={styles.header}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
               <button style={{ ...styles.newTripBtn, minHeight: 44 }} onClick={() => nav("/")}>← New Trip</button>
-              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                {isLoggedIn && (
+              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", position: "relative" }}>
+                {isLoggedIn && !isSharedView && (
                   <button style={{ ...styles.newTripBtn, color: "var(--text-muted)", minHeight: 44 }} onClick={() => nav("/my-trips")}>
                     My Trips
                   </button>
                 )}
-                <button
-                  style={{
-                    ...styles.newTripBtn,
-                    background: saved ? "rgba(13,148,136,0.15)" : "var(--cal-accent)",
-                    border: saved ? "1px solid var(--cal-accent)" : "none",
-                    color: "#fff",
-                    opacity: saving ? 0.6 : 1,
-                    cursor: saving ? "not-allowed" : "pointer",
-                    minHeight: 44,
-                  }}
-                  onClick={handleSave}
-                  disabled={saving || saved}
-                >
-                  {saved ? "✓ Saved!" : saving ? "Saving…" : isLoggedIn ? "Save Trip" : "Save Trip"}
-                </button>
+                {/* Share button */}
+                {!isSharedView && (
+                  <div style={{ position: "relative" }}>
+                    <button
+                      ref={shareBtnRef}
+                      style={{
+                        ...styles.newTripBtn,
+                        minHeight: 44,
+                        background: showSharePopover ? "rgba(139,92,246,0.15)" : "transparent",
+                        border: showSharePopover ? "1px solid rgba(139,92,246,0.5)" : "1px solid var(--border)",
+                        color: showSharePopover ? "#8b5cf6" : "var(--text-muted)",
+                        opacity: sharing ? 0.6 : 1,
+                        cursor: sharing ? "not-allowed" : "pointer",
+                        display: "flex", alignItems: "center", gap: 6,
+                      }}
+                      onClick={handleShare}
+                      disabled={sharing}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+                        <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+                      </svg>
+                      {sharing ? "Sharing…" : "Share"}
+                    </button>
+
+                    {/* Share popover */}
+                    <AnimatePresence>
+                      {showSharePopover && (
+                        <motion.div
+                          ref={sharePopoverRef}
+                          initial={{ opacity: 0, y: -6, scale: 0.97 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, y: -6, scale: 0.97 }}
+                          transition={{ duration: 0.15 }}
+                          style={{
+                            position: "absolute",
+                            top: "calc(100% + 8px)",
+                            right: 0,
+                            width: isMobile ? "min(320px, 90vw)" : 340,
+                            background: isDarkMode ? "rgba(18,18,28,0.98)" : "rgba(255,252,248,0.99)",
+                            border: isDarkMode ? "1px solid rgba(255,255,255,0.12)" : "1px solid rgba(168,207,223,0.5)",
+                            borderRadius: 14,
+                            padding: "14px 14px 12px",
+                            boxShadow: "0 8px 32px rgba(0,0,0,0.3)",
+                            backdropFilter: "blur(16px)",
+                            zIndex: 1000,
+                          }}
+                        >
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                            <span style={{ fontWeight: 700, fontSize: "0.88rem", color: isDarkMode ? "#fff" : "#334455" }}>
+                              Share this trip
+                            </span>
+                            <button onClick={() => setShowSharePopover(false)} style={{ background: "none", border: "none", cursor: "pointer", color: isDarkMode ? "rgba(255,255,255,0.4)" : "rgba(100,120,140,0.6)", fontSize: "1.1rem", lineHeight: 1, padding: 0 }}>×</button>
+                          </div>
+                          <div style={{ display: "flex", gap: 6 }}>
+                            <input
+                              readOnly
+                              value={shareUrl}
+                              onFocus={e => e.target.select()}
+                              style={{
+                                flex: 1,
+                                padding: "7px 10px",
+                                borderRadius: 8,
+                                border: isDarkMode ? "1px solid rgba(255,255,255,0.12)" : "1px solid rgba(168,207,223,0.5)",
+                                background: isDarkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)",
+                                color: isDarkMode ? "rgba(220,235,255,0.8)" : "#445566",
+                                fontSize: "0.75rem",
+                                outline: "none",
+                                fontFamily: "monospace",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                              }}
+                            />
+                            <button
+                              onClick={handleCopyLink}
+                              style={{
+                                padding: "7px 14px",
+                                borderRadius: 8,
+                                border: "none",
+                                background: copied ? "rgba(13,148,136,0.85)" : "#8b5cf6",
+                                color: "#fff",
+                                fontSize: "0.8rem",
+                                fontWeight: 700,
+                                cursor: "pointer",
+                                whiteSpace: "nowrap",
+                                transition: "background 0.15s",
+                              }}
+                            >
+                              {copied ? "Copied!" : "Copy link"}
+                            </button>
+                          </div>
+                          <div style={{ marginTop: 8, fontSize: "0.72rem", color: isDarkMode ? "rgba(255,255,255,0.35)" : "rgba(100,120,140,0.6)" }}>
+                            Anyone with this link can view this trip.
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                )}
+
+                {!isSharedView && (
+                  <button
+                    style={{
+                      ...styles.newTripBtn,
+                      background: saved ? "rgba(13,148,136,0.15)" : "var(--cal-accent)",
+                      border: saved ? "1px solid var(--cal-accent)" : "none",
+                      color: "#fff",
+                      opacity: saving ? 0.6 : 1,
+                      cursor: saving ? "not-allowed" : "pointer",
+                      minHeight: 44,
+                    }}
+                    onClick={handleSave}
+                    disabled={saving || saved}
+                  >
+                    {saved ? "✓ Saved!" : saving ? "Saving…" : "Save Trip"}
+                  </button>
+                )}
+
+                {isSharedView && (
+                  <button
+                    style={{ ...styles.newTripBtn, background: "var(--cal-accent)", border: "none", color: "#fff", minHeight: 44 }}
+                    onClick={() => nav("/")}
+                  >
+                    Plan your own trip →
+                  </button>
+                )}
               </div>
             </div>
             {saveErr && (
@@ -211,7 +415,7 @@ export default function TripPlan() {
               style={{ width: "100%" }}
             >
               {activeTab === "Overview"    && <TabOverview plan={plan} prefs={prefs} />}
-              {activeTab === "Hotels"      && <TabHotels hotels={plan.hotels || []} currency={prefs?.currency} cities={prefs?.destinations} />}
+              {activeTab === hotelTabLabel && <TabHotels hotels={plan.hotels || []} currency={prefs?.currency} cities={prefs?.destinations} accommodationType={prefs?.accommodation_type || "hotel"} />}
               {activeTab === "Experiences"  && <TabActivities activities={plan.activities || []} currency={prefs?.currency} cities={prefs?.destinations} />}
               {activeTab === "Food"        && <TabFood foodSpots={plan.food_spots || []} destination={prefs?.destination} cities={prefs?.destinations} />}
               {activeTab === "Transportation" && <TabTransportation options={plan.transportation_options || []} currency={prefs?.currency} origin={prefs?.origin} destination={prefs?.destination} overrideNote={plan._transport_override} groupSize={prefs?.group_size ?? 1} />}
@@ -422,34 +626,47 @@ function CityHeader({ name }) {
   );
 }
 
-function TabHotels({ hotels, currency, cities }) {
-  if (!hotels.length) return <EmptyState>No hotel recommendations available.</EmptyState>;
+const ACCOM_META = {
+  hotel:  { icon: "🏨", emptyMsg: "No hotel recommendations available.",  linkLabel: "Find on Maps",       buildLink: (name, loc) => buildSearchUrl(name, loc) },
+  airbnb: { icon: "🏠", emptyMsg: "No stay recommendations available.",   linkLabel: "Search on Airbnb",   buildLink: (name, loc) => `https://www.airbnb.com/s/${encodeURIComponent(loc || name)}/homes` },
+  hostel: { icon: "🛏️", emptyMsg: "No hostel recommendations available.", linkLabel: "Search on Hostelworld", buildLink: (name, loc) => `https://www.hostelworld.com/findabed.php/ChosenCity.${encodeURIComponent(loc || name)}` },
+  mixed:  { icon: "🏠", emptyMsg: "No accommodation recommendations available.", linkLabel: "Find on Maps", buildLink: (name, loc) => buildSearchUrl(name, loc) },
+};
+
+function TabHotels({ hotels, currency, cities, accommodationType = "hotel" }) {
+  const meta = ACCOM_META[accommodationType] || ACCOM_META.hotel;
+  if (!hotels.length) return <EmptyState>{meta.emptyMsg}</EmptyState>;
   const groups = groupByCity(hotels, cities);
-  const renderHotel = (h, i) => (
-    <Card key={i}>
-      <div style={styles.hotelHeader}>
-        <div>
-          <div style={styles.hotelName}>{h.name}</div>
-          <div style={styles.hotelType}>{h.type}</div>
+  const renderHotel = (h, i) => {
+    const typeIcon = accommodationType === "airbnb" ? "🏠"
+      : accommodationType === "hostel" ? "🛏️"
+      : "🏨";
+    return (
+      <Card key={i}>
+        <div style={styles.hotelHeader}>
+          <div>
+            <div style={styles.hotelName}>{typeIcon} {h.name}</div>
+            <div style={styles.hotelType}>{h.type}</div>
+          </div>
+          <div style={styles.priceTag}>
+            <div style={styles.priceAmount}>{currency} {h.price_per_night?.toLocaleString?.() ?? h.price_per_night}</div>
+            <div style={styles.priceLabel}>/ night</div>
+          </div>
         </div>
-        <div style={styles.priceTag}>
-          <div style={styles.priceAmount}>{currency} {h.price_per_night?.toLocaleString?.() ?? h.price_per_night}</div>
-          <div style={styles.priceLabel}>/ night</div>
+        {accommodationType === "hotel" && h.stars && <Stars count={h.stars} />}
+        <div style={styles.hotelLocation}>📍 {h.location}</div>
+        <p style={styles.hotelWhy}>{h.why}</p>
+        <div style={{ marginTop: 10 }}>
+          <ResourceLink href={meta.buildLink(h.name, h.location)} label={meta.linkLabel} />
         </div>
-      </div>
-      {h.stars && <Stars count={h.stars} />}
-      <div style={styles.hotelLocation}>📍 {h.location}</div>
-      <p style={styles.hotelWhy}>{h.why}</p>
-      <div style={{ marginTop: 10 }}>
-        <ResourceLink href={buildSearchUrl(h.name, h.location)} label="Find on Maps" />
-      </div>
-      {h.amenities?.length > 0 && (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
-          {h.amenities.map((a, j) => <Pill key={j} small>{a}</Pill>)}
-        </div>
-      )}
-    </Card>
-  );
+        {h.amenities?.length > 0 && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
+            {h.amenities.map((a, j) => <Pill key={j} small>{a}</Pill>)}
+          </div>
+        )}
+      </Card>
+    );
+  };
   return (
     <div style={styles.tabContent}>
       {groups
@@ -1091,15 +1308,18 @@ function TabBudget({ budget, prefs }) {
     : true;
   const isOverBudget = enteredTotal != null && enteredTotal < rangeMin;
 
+  const accomIcon = { hotel: "🏨", airbnb: "🏠", hostel: "🛏️", mixed: "🏠" }[prefs?.accommodation_type] || "🏨";
+  const accomLabel = ACCOMMODATION_TAB_LABELS[prefs?.accommodation_type] || "Hotels";
+
   const items = [
-    { key: "hotels",   label: "🏨 Hotels",         value: budget.hotels_total,        color: "#0d9488" },
+    { key: "hotels",   label: `${accomIcon} ${accomLabel}`,  value: budget.hotels_total,        color: "#0d9488" },
     { key: "activities", label: "🎭 Experiences & Attractions", value: budget.activities_total, color: "#8b5cf6" },
     { key: "food",     label: "🍽️ Food",            value: budget.food_total,          color: "#f59e0b" },
     { key: "transport",label: "🚗 Transportation",   value: transportTotal,             color: "#3b82f6",
       displayValue: perPersonMode ? Math.round(transportTotal / groupSize) : transportTotal,
       range: transportRange, breakdown: transportBreakdown },
-    { key: "shopping", label: "🛍️ Shopping, Miscellaneous & Incidentals", value: budget.shopping_misc_total, color: "#ec4899" },
-  ].filter((i) => i.value > 0);
+    { key: "shopping", label: "🛍️ Shopping, Misc & Incidentals", value: budget.shopping_misc_total || 0, color: "#ec4899", alwaysShow: true },
+  ].filter((i) => i.value > 0 || i.alwaysShow);
 
   const PRIORITY_LABELS = {
     hotels: "🏨 Hotels", activities: "🎭 Experiences & Attractions", food: "🍽️ Food & Dining",

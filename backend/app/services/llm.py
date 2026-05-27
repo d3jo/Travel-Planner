@@ -173,6 +173,7 @@ def _build_trip_plan_prompt(preferences: Dict[str, Any]) -> tuple[str, str]:
     budget_type = preferences.get("budget_type", "total")
     additional_notes = preferences.get("additional_notes", "")
     transport_mode = preferences.get("transport_mode", "flight")
+    accommodation_type = preferences.get("accommodation_type", "hotel")
 
     effective_total = budget * group_size if budget_type == "per_person" else budget
     per_person = budget if budget_type == "per_person" else (budget / max(group_size, 1))
@@ -320,12 +321,42 @@ def _build_trip_plan_prompt(preferences: Dict[str, Any]) -> tuple[str, str]:
         counts_line,
         multi_city_instruction,
         "Real place names. All prices in user's currency. Be concise.\n",
-        "Hotels: realistic rates incl. taxes. Major cities mid-range 180-400+/night. hotels_total = price_per_night x nights.\n",
+        f"ACCOMMODATION TYPE: User prefers '{accommodation_type}'. Follow the rules and rate table below exactly.\n",
+        "- 'hotel': Traditional hotels, boutique hotels, resorts only. type = 'Hotel', 'Boutique Hotel', 'Resort', etc.\n",
+        "- 'airbnb': Vacation rentals, serviced apartments, guesthouses — NOT hotels. type = 'Vacation Rental', 'Airbnb', 'Serviced Apartment', 'Guesthouse'. "
+        "booking_url must point to airbnb.com search for the destination.\n",
+        "- 'hostel': Hostels and budget stays only. type = 'Hostel', 'Budget Hostel', 'Party Hostel'. "
+        "Mix private rooms and dorm beds; use appropriate rate per bed/room type.\n",
+        "- 'mixed': At least one hotel, one Airbnb/rental, and one hostel. Apply the matching rate row for each.\n",
+        "NIGHTLY RATE REFERENCE TABLE (all in user's currency, per unit, taxes included):\n",
+        "Classify the destination into one of three tiers before picking rates:\n",
+        "  BUDGET tier — SE Asia (Thailand/Vietnam/Indonesia/Philippines/Cambodia), South Asia (India/Nepal/Sri Lanka), "
+        "Eastern Europe (Poland/Hungary/Romania/Bulgaria), Central America, most of Africa, rural/small-city destinations.\n",
+        "  MID tier — Southern/Western Europe (Spain/Italy/France/Germany/Portugal), East Asia (Japan/South Korea/Taiwan/HK), "
+        "major cities in Latin America (Mexico City/Buenos Aires/São Paulo), Middle East (Dubai/Jordan), Australia/NZ outside city centres.\n",
+        "  PREMIUM tier — North America cities (NYC/Toronto/Vancouver/LA/SF/Chicago/Miami), London/Paris/Zurich/Amsterdam/Oslo/Copenhagen/Stockholm/Singapore/Sydney CBD/Tokyo central.\n",
+        "  | Accommodation  | BUDGET tier      | MID tier          | PREMIUM tier        |\n",
+        "  | Hotel (3★)     | 40–80/night      | 100–180/night     | 180–320/night       |\n",
+        "  | Hotel (4–5★)   | 80–160/night     | 180–350/night     | 320–600+/night      |\n",
+        "  | Airbnb entire  | 35–75/night      | 90–170/night      | 160–350/night       |\n",
+        "  | Airbnb room    | 18–40/night      | 45–90/night       | 80–160/night        |\n",
+        "  | Hostel private | 15–30/night      | 30–65/night       | 55–100/night        |\n",
+        "  | Hostel dorm    | 6–15/night       | 15–35/night       | 30–60/night         |\n",
+        "Pick a rate from within the matching cell. Do NOT anchor to the low end — use a realistic midpoint unless the user's budget is very tight.\n",
+        "hotels_total = chosen price_per_night × nights. Show this arithmetic in your head before writing the number.\n",
+        "stars field: set for hotels (3 or 4 or 5). Set to 0 for Airbnb and hostels.\n",
         "food_spots.avg_price: '~CAD 18-30/person'. popular_dish: one dish. why_popular: 1-2 sentences. review_summary: one line.\n",
         "weather_note: 2 sentences, temp C/F, what to pack.\n",
         weekly_instructions,
         f"Budget: priorities={priority_allocation}. Target allocation (hotels/activities/food/shopping ONLY, NOT transport)={target_alloc}. ",
-        "Apply each % to EFFECTIVE TOTAL. grand_total = sum of five categories. shopping_misc = Uber,metro,snacks,coffee,tips,souvenirs.\n",
+        "Apply each % to EFFECTIVE TOTAL. grand_total = sum of five categories.\n",
+        f"SHOPPING & MISC RULES:\n",
+        f"- shopping_misc covers: Uber/taxi rides, metro/bus passes, coffee, snacks, tips, souvenirs, entrance fees not listed as activities, SIM cards, pharmacy, laundry.\n",
+        f"- shopping_misc_total MUST be at least {nights * group_size * 20} {currency} "
+        f"(= {nights} nights × {group_size} people × ~20/person/day as an absolute floor for daily incidentals).\n",
+        f"- A realistic shopping_misc is {nights * group_size * 30}–{nights * group_size * 60} {currency} for most trips. "
+        f"Do NOT set it to 0 or a token amount just to fit within budget — it is a real cost that travellers always incur. "
+        f"If the percentage allocation yields less than the floor, use the floor and trim activities_total slightly to compensate.\n",
         "FOOD BUDGET RULES:\n",
         f"- The itinerary covers {nights} days with 3 meals/day for {group_size} traveler(s). ",
         f"food_total MUST be at least {nights * group_size * 45} {currency} ",

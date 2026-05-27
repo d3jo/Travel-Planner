@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import uuid
 from typing import Any, Dict, List
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
@@ -106,3 +107,15 @@ def delete_trip(trip_id: int, db: Session = Depends(get_db), user=Depends(_auth)
         raise HTTPException(status_code=404, detail="Trip not found.")
     db.delete(trip)
     db.commit()
+
+
+@router.post("/{trip_id}/share")
+def share_trip(trip_id: int, db: Session = Depends(get_db), user=Depends(_auth)):
+    trip = db.query(Trip).filter(Trip.id == trip_id, Trip.user_id == user.id).first()
+    if not trip:
+        raise HTTPException(status_code=404, detail="Trip not found.")
+    if not trip.share_token:
+        trip.share_token = uuid.uuid4().hex
+        db.commit()
+        db.refresh(trip)
+    return {"share_token": trip.share_token}

@@ -24,3 +24,10 @@ def get_db():
 def init_db():
     from app import models  # noqa: F401 – registers models with Base
     Base.metadata.create_all(bind=engine)
+    from sqlalchemy import text
+    with engine.connect() as conn:
+        try:
+            conn.execute(text("ALTER TABLE trips ADD COLUMN share_token VARCHAR(64)"))
+            conn.commit()
+        except Exception:
+            pass  # Column already exists

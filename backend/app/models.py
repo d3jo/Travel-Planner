@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from datetime import datetime
 
-from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from app.database import Base
@@ -33,6 +33,7 @@ class Trip(Base):
     end_date = Column(String(16))
     plan_json = Column(Text, nullable=False)
     prefs_json = Column(Text, nullable=True)
+    share_token = Column(String(64), unique=True, index=True, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     owner = relationship("User", back_populates="trips")

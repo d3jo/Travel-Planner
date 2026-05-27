@@ -12,6 +12,7 @@ from app.routes.trip import router as trip_router
 from app.routes.photos import router as photos_router
 from app.routes.auth import router as auth_router
 from app.routes.saved_trips import router as saved_trips_router
+from app.routes.share import router as share_router
 from app.database import init_db
 
 
@@ -50,6 +51,7 @@ def create_app() -> FastAPI:
 
     app.include_router(auth_router)
     app.include_router(saved_trips_router)
+    app.include_router(share_router)
     app.include_router(trip_router)
     app.include_router(photos_router)
 

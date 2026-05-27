@@ -3,6 +3,7 @@ import { useGeneration } from "../contexts/GenerationContext";
 import { DayPicker } from "react-day-picker";
 import { AnimatePresence, motion, Reorder } from "framer-motion";
 import { ComposableMap, Geographies, Geography, ZoomableGroup, Marker as MapMarker } from "react-simple-maps";
+import { geoMercator } from "d3-geo";
 import "react-day-picker/dist/style.css";
 import api from "../api";
 import { useIsDarkMode, useTheme } from "../contexts/ThemeContext";
@@ -476,6 +477,7 @@ function MapPhase({ onConfirm, initialIsMultiDest = false, initialMultiDests = [
   const [recommendationError, setRecommendationError] = useState("");
   const [hoveredCountry, setHoveredCountry] = useState(null);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
+  const [clickPopup, setClickPopup] = useState(null);
 
   const constrain = (pos) => {
     const vw = 360 / Math.max(1, pos.zoom);
@@ -489,40 +491,50 @@ function MapPhase({ onConfirm, initialIsMultiDest = false, initialMultiDests = [
     };
   };
 
-  const handleCountryClick = useCallback(async (geo) => {
-    const name = geo.properties.name;
+  const screenToLatLon = useCallback((clientX, clientY) => {
+    const svg = mapRef.current?.querySelector("svg");
+    if (!svg) return null;
+    const rect = svg.getBoundingClientRect();
+    const vb = svg.viewBox.baseVal;
+    const svgW = vb.width || 800;
+    const svgH = vb.height || 600;
+    const svgX = (clientX - rect.left) * (svgW / rect.width);
+    const svgY = (clientY - rect.top) * (svgH / rect.height);
+    const proj = geoMercator().scale(145).translate([svgW / 2, svgH / 2]);
+    const [cx, cy] = proj(position.coordinates);
+    const k = position.zoom;
+    const projX = (svgX - (svgW / 2 - cx * k)) / k;
+    const projY = (svgY - (svgH / 2 - cy * k)) / k;
+    return proj.invert([projX, projY]);
+  }, [position]);
+
+  const handleCountryClick = useCallback(async (geo, evt) => {
+    const countryName = geo.properties.name;
+    if (!evt) return;
+
+    const rect = mapRef.current?.getBoundingClientRect();
+    const popupX = rect ? evt.clientX - rect.left : evt.clientX;
+    const popupY = rect ? evt.clientY - rect.top : evt.clientY;
+    setClickPopup({ loading: true, x: popupX, y: popupY });
+
+    const lonLat = screenToLatLon(evt.clientX, evt.clientY);
+    if (!lonLat) { setClickPopup(null); return; }
+    const [lon, lat] = lonLat;
+
     try {
       const res = await fetch(
-        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(name)}&format=json&limit=1`,
+        `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`,
         { headers: { "Accept-Language": "en" } }
       );
       const data = await res.json();
-      const dest = { name, coords: data[0] ? [parseFloat(data[0].lat), parseFloat(data[0].lon)] : [0, 0], type: "country", countryName: name };
-      if (isMultiDest) {
-        setMultiDestHint(`Pick a specific city in ${name} — use the search bar or click a city pin`);
-        setTimeout(() => setMultiDestHint(""), 3500);
-      } else {
-        setSelected(dest);
-        setRecommendationCountry(normalizeCountryName(name));
-        setShowRecommendations(false);
-        setFocusedRecommendation(null);
-        setCityRecommendations([]);
-        setRecommendationError("");
-      }
+      const addr = data.address || {};
+      const city = addr.city || addr.town || addr.village || addr.municipality || addr.suburb || addr.county || countryName;
+      const country = addr.country || countryName;
+      setClickPopup({ loading: false, city, country, lat, lon, x: popupX, y: popupY });
     } catch {
-      if (isMultiDest) {
-        setMultiDestHint(`Pick a specific city — use the search bar or click a city pin`);
-        setTimeout(() => setMultiDestHint(""), 3500);
-      } else {
-        setSelected({ name, coords: [0, 0], type: "country", countryName: name });
-        setRecommendationCountry(normalizeCountryName(name));
-        setShowRecommendations(false);
-        setFocusedRecommendation(null);
-        setCityRecommendations([]);
-        setRecommendationError("");
-      }
+      setClickPopup(null);
     }
-  }, [isMultiDest, toggleMultiDestItem]);
+  }, [screenToLatLon]);
 
   const handleSearchSelect = useCallback(({ name, coords, type, countryName }) => {
     const shortName = type === "city" ? name.split(",")[0].trim() : name;
@@ -609,13 +621,13 @@ function MapPhase({ onConfirm, initialIsMultiDest = false, initialMultiDests = [
         style={{ width: "100%", height: "100%", background: mapBg, shapeRendering: "geometricPrecision" }}
       >
         <ZoomableGroup center={position.coordinates} zoom={position.zoom}
-          onMoveEnd={(pos) => setPosition(constrain(pos))} minZoom={1.8} maxZoom={40}
+          onMoveEnd={(pos) => { setPosition(constrain(pos)); setClickPopup(null); }} minZoom={1.8} maxZoom={40}
           filterZoomEvent={(e) => !e.button}
         >
           <Geographies geography={GEO_URL}>
             {({ geographies }) => geographies.map((geo) => (
               <Geography key={geo.rsmKey} geography={geo}
-                onClick={() => handleCountryClick(geo)}
+                onClick={(evt) => handleCountryClick(geo, evt)}
                 onMouseEnter={() => setHoveredCountry(geo.properties.name || null)}
                 onMouseLeave={() => setHoveredCountry(null)}
                 style={{
@@ -1033,6 +1045,87 @@ function MapPhase({ onConfirm, initialIsMultiDest = false, initialMultiDests = [
           </div>
         );
       })()}
+
+      {/* Reverse-geocode click popup */}
+      <AnimatePresence>
+        {clickPopup && (() => {
+          const mapW = mapRef.current?.offsetWidth ?? 9999;
+          const mapH = mapRef.current?.offsetHeight ?? 9999;
+          const popW = 180;
+          const popH = 90;
+          const x = Math.min(Math.max(clickPopup.x - popW / 2, 8), mapW - popW - 8);
+          const y = clickPopup.y - popH - 14 < 8 ? clickPopup.y + 14 : clickPopup.y - popH - 14;
+          return (
+            <motion.div
+              key="clickPopup"
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              transition={{ duration: 0.12 }}
+              style={{
+                position: "absolute", left: x, top: y, width: popW, zIndex: 600,
+                background: isDarkMode ? "rgba(10,10,24,0.96)" : "rgba(255,249,240,0.98)",
+                color: isDarkMode ? "rgba(220,235,255,0.92)" : "#334455",
+                border: isDarkMode ? "1px solid rgba(255,255,255,0.16)" : "1px solid rgba(168,207,223,0.55)",
+                borderRadius: 12, padding: "10px 12px 10px",
+                boxShadow: "0 6px 24px rgba(0,0,0,0.38)",
+                backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)",
+                fontFamily: '"Pixelify Sans", sans-serif',
+              }}
+            >
+              {/* close button */}
+              <button
+                onClick={() => setClickPopup(null)}
+                style={{
+                  position: "absolute", top: 6, right: 8,
+                  background: "none", border: "none", cursor: "pointer",
+                  color: isDarkMode ? "rgba(255,255,255,0.4)" : "rgba(100,120,140,0.6)",
+                  fontSize: "1rem", lineHeight: 1, padding: 0,
+                }}
+              >×</button>
+
+              {clickPopup.loading ? (
+                <div style={{ fontSize: "0.8rem", opacity: 0.6, paddingTop: 4 }}>Finding city…</div>
+              ) : (
+                <>
+                  <div style={{ fontWeight: 700, fontSize: "0.88rem", letterSpacing: "0.02em", paddingRight: 14, lineHeight: 1.3 }}>
+                    {clickPopup.city}
+                  </div>
+                  <div style={{ fontSize: "0.74rem", opacity: 0.55, marginTop: 2, marginBottom: 8 }}>
+                    {clickPopup.country}
+                  </div>
+                  <button
+                    onClick={() => {
+                      const dest = { name: clickPopup.city, coords: [clickPopup.lat, clickPopup.lon], type: "city", countryName: clickPopup.country };
+                      if (isMultiDest) {
+                        toggleMultiDestItem(dest);
+                      } else {
+                        setSelected(dest);
+                        setRecommendationCountry(null);
+                        setShowRecommendations(false);
+                        setFocusedRecommendation(null);
+                        setCityRecommendations([]);
+                        setRecommendationError("");
+                      }
+                      setClickPopup(null);
+                    }}
+                    style={{
+                      width: "100%", padding: "5px 0",
+                      background: "#0d9488", color: "#fff",
+                      border: "none", borderRadius: 7, cursor: "pointer",
+                      fontSize: "0.8rem", fontWeight: 700,
+                      fontFamily: '"Pixelify Sans", sans-serif',
+                      letterSpacing: "0.03em",
+                    }}
+                  >
+                    {isMultiDest ? "Add destination" : "Select"}
+                  </button>
+                </>
+              )}
+            </motion.div>
+          );
+        })()}
+      </AnimatePresence>
     </div>
   );
 }
@@ -1233,6 +1326,7 @@ export default function Wizard() {
   const [budgetType, setBudgetType] = useState("total");
   const [currency, setCurrency]   = useState("CAD");
   const [transportMode, setTransportMode] = useState("flight");
+  const [accommodationType, setAccommodationType] = useState("hotel");
   const [budgetPriorities, setBudgetPriorities] = useState(BUDGET_PRIORITIES.map(p => p.id));
   const [activityPrefs, setActivityPrefs]       = useState([]);
   const [tripType, setTripType]   = useState("solo");
@@ -1288,6 +1382,7 @@ const handleSubmit = () => {
     activity_preferences: activityPrefs,
     trip_type: tripType, group_size: Number(groupSize),
     transport_mode: transportMode,
+    accommodation_type: accommodationType,
     additional_notes: notes.trim() || null,
     ...(destinations.length > 1 && { destinations: destinations.map((d) => d.name) }),
     ...(destinations.length > 1 && {
@@ -1389,6 +1484,7 @@ const handleSubmit = () => {
                     groupSize={groupSize} setGroupSize={setGroupSize}
                     currency={currency} setCurrency={setCurrency}
                     transportMode={transportMode} setTransportMode={setTransportMode}
+                    accommodationType={accommodationType} setAccommodationType={setAccommodationType}
                     tripType={tripType} setTripType={setTripType}
                   />
                 </StepBox>
@@ -1505,12 +1601,19 @@ function getDisabledModes(originStr, destStr) {
   return new Set();
 }
 
+const ACCOMMODATION_TYPES = [
+  { id: "hotel",   label: "🏨 Hotel",            hint: "Hotels, resorts & boutique stays" },
+  { id: "airbnb",  label: "🏠 Airbnb / Rental",  hint: "Home-style & vacation rentals" },
+  { id: "hostel",  label: "🛏️ Hostel",            hint: "Budget-friendly, social stays" },
+  { id: "mixed",   label: "🔀 Mix it up",         hint: "Variety of accommodation types" },
+];
+
 function StepDatesAndBudget({
   origin, setOrigin, destination, destinations = [], setDestinations,
   autoDistribute, setAutoDistribute, dayAssignments, setDayAssignments,
   dateRange, setDateRange, showCal, setShowCal, calMonth, setCalMonth,
   budget, setBudget, budgetType, setBudgetType, groupSize, setGroupSize, currency, setCurrency,
-  transportMode, setTransportMode, tripType, setTripType,
+  transportMode, setTransportMode, accommodationType, setAccommodationType, tripType, setTripType,
 }) {
   const isDarkMode = useIsDarkMode();
   const isMultiDestTrip = destinations.length > 1;
@@ -1823,6 +1926,38 @@ function StepDatesAndBudget({
                 </span>
               </div>
             )}
+          </div>
+
+          {/* Accommodation type */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <div style={styles.stepTitle}>Where will you stay?</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 7 }}>
+              {ACCOMMODATION_TYPES.map(({ id, label, hint }) => {
+                const sel = accommodationType === id;
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setAccommodationType(id)}
+                    style={{
+                      display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 3,
+                      padding: "10px 12px", borderRadius: 10, textAlign: "left",
+                      cursor: "pointer",
+                      background: sel ? "rgba(13,148,136,0.12)" : inputBg,
+                      border: `1px solid ${sel ? "var(--cal-accent)" : panelBorder.replace("1px solid ", "")}`,
+                      transition: "all 0.15s",
+                    }}
+                  >
+                    <span style={{ fontSize: "0.9rem", fontWeight: sel ? 700 : 500, color: sel ? "var(--cal-accent-fg)" : "var(--white)", fontFamily: '"Pixelify Sans", sans-serif' }}>
+                      {label}
+                    </span>
+                    <span style={{ fontSize: "0.7rem", color: sel ? "var(--cal-accent)" : "var(--text-muted)" }}>
+                      {hint}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
         </div>
