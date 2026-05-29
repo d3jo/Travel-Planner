@@ -1508,13 +1508,13 @@ function TabBudget({ budget, prefs }) {
               }}>
                 {isUnder ? (
                   <>
-                    <span style={{ fontWeight: 700, color: "#38bdf8" }}>ℹ️ Budget not fully used: </span>
-                    You have <strong>{diffLabel}</strong> remaining. Consider allocating more toward <strong>{upgradeTargets}</strong> — there's room to upgrade.
+                    <span style={{ fontWeight: 700, color: "#38bdf8" }}>ℹ️ </span>
+                    Your budget is about <strong>~{diffLabel} over</strong> the estimated trip cost — there's room to upgrade.
                   </>
                 ) : (
                   <>
-                    <span style={{ fontWeight: 700, color: "#f87171" }}>⚠️ Over your budget: </span>
-                    This plan exceeds your budget by <strong>{diffLabel}</strong>. Consider trimming <strong>{upgradeTargets}</strong> to stay within budget.
+                    <span style={{ fontWeight: 700, color: "#f87171" }}>⚠️ </span>
+                    Your budget is around <strong>~{diffLabel} under</strong> the estimated trip cost.
                   </>
                 )}
               </div>
