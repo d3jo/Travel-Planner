@@ -239,6 +239,23 @@ def _build_trip_plan_prompt(preferences: Dict[str, Any]) -> tuple[str, str]:
         f"#{i+1} {p}" for i, p in enumerate(budget_priorities)
     ) if budget_priorities else "none"
 
+    # Rank for each category (1 = highest priority)
+    num_cats = len(_budget_cats)
+    accom_rank  = key_rank.get("hotels_total",        num_cats)
+    food_rank   = key_rank.get("food_total",           num_cats)
+    activity_rank = key_rank.get("activities_total",   num_cats)
+    shopping_rank = key_rank.get("shopping_misc_total",num_cats)
+
+    def _quality_label(rank):
+        if rank <= 2: return "HIGH"
+        if rank <= 4: return "MEDIUM"
+        return "LOW"
+
+    accom_quality   = _quality_label(accom_rank)
+    food_quality    = _quality_label(food_rank)
+    activity_quality = _quality_label(activity_rank)
+    shopping_quality = _quality_label(shopping_rank)
+
     is_luxury = "luxury" in [p.lower() for p in activity_preferences]
     transport_rank = next(
         (i + 1 for i, p in enumerate(budget_priorities) if "transport" in p.lower()),
@@ -342,43 +359,61 @@ def _build_trip_plan_prompt(preferences: Dict[str, Any]) -> tuple[str, str]:
         "  | Airbnb room    | 18–40/night      | 45–90/night       | 80–160/night        |\n",
         "  | Hostel private | 15–30/night      | 30–65/night       | 55–100/night        |\n",
         "  | Hostel dorm    | 6–15/night       | 15–35/night       | 30–60/night         |\n",
-        "Pick a rate from within the matching cell. Do NOT anchor to the low end — use a realistic midpoint unless the user's budget is very tight.\n",
-        "hotels_total = chosen price_per_night × nights. Show this arithmetic in your head before writing the number.\n",
-        "stars field: set for hotels (3 or 4 or 5). Set to 0 for Airbnb and hostels.\n",
+        "The priority-based quality rules below determine where within each cell to pick.\n",
         "food_spots.avg_price: '~CAD 18-30/person'. popular_dish: one dish. why_popular: 1-2 sentences. review_summary: one line.\n",
         "weather_note: 2 sentences, temp C/F, what to pack.\n",
         weekly_instructions,
-        "CORE RULE: Plan at REALISTIC prices first. Set within_budget=false if grand_total exceeds the user's budget. "
-        "NEVER shrink realistic costs below their floors just to hit the budget number — an honest over-budget plan is better than a fake within-budget one.\n",
-        f"ACCOMMODATION PRICING — determine from the rate table, not from budget allocation:\n",
-        f"STEP A — you already classified the destination tier above (Budget/Mid/Premium).\n",
-        f"STEP B — pick price_per_night from the matching cell. Use a realistic midpoint, NOT the floor, unless the user's budget is severely constrained.\n",
-        f"STEP C — hotels_total = price_per_night × {nights} nights × (rooms needed for {group_size} people). "
-        f"Solo/couple = 1 room/unit. Group ≥3 = consider 2 units.\n",
-        f"STEP D — hotels_total from Step C is the authoritative value. The budget percentage for hotels is only a soft target. "
-        f"If Step C yields more than the percentage allocation, use Step C's value anyway — do NOT reduce price_per_night to match the percentage.\n",
-        f"ABSOLUTE MINIMUM price_per_night (never go below these even for tight budgets):\n",
-        f"  Hotel: Budget 50 | Mid 110 | Premium 200 (per room)\n",
+        "CORE RULE: Plan at REALISTIC prices first. NEVER fabricate low prices to fit the budget — "
+        "set within_budget=false if realistic grand_total exceeds the user's budget.\n",
+        f"PRIORITY-BASED QUALITY — the user ranked their investment priorities as: {priority_allocation}.\n",
+        "Each category has a priority level (HIGH/MEDIUM/LOW) that controls BOTH the quality chosen AND the price point within the tier range:\n",
+        "  HIGH priority  → pick from the UPPER third of the tier range; upgrade quality (nicer room, finer restaurants, more activities).\n",
+        "  MEDIUM priority → pick from the MIDDLE of the tier range.\n",
+        "  LOW priority   → pick from the LOWER-MIDDLE of the tier range, but never below the absolute floor.\n",
+        f"ACCOMMODATION PRICING (accommodation priority = {accom_quality}, rank #{accom_rank}):\n",
+        f"STEP A — classify the destination tier (Budget/Mid/Premium) using the rate table above.\n",
+        f"STEP B — pick price_per_night based on priority:\n",
+        f"  HIGH  priority: upper third of tier cell (e.g. Hotel Mid → 250–350/night, Airbnb Mid → 140–170/night)\n",
+        f"  MEDIUM priority: middle of tier cell    (e.g. Hotel Mid → 150–220/night, Airbnb Mid → 110–140/night)\n",
+        f"  LOW   priority: lower-middle of tier cell but ≥ floor (e.g. Hotel Mid → 110–150/night)\n",
+        f"STEP C — hotels_total = price_per_night × {nights} nights × rooms (1 room for solo/couple, 2 for group ≥3).\n",
+        f"STEP D — this value is authoritative. Never reduce it below Step C to hit a budget percentage.\n",
+        f"ABSOLUTE MINIMUM price_per_night (floor, regardless of priority):\n",
+        f"  Hotel: Budget 50 | Mid 110 | Premium 200\n",
         f"  Airbnb entire home: Budget 40 | Mid 95 | Premium 170\n",
         f"  Airbnb private room: Budget 20 | Mid 50 | Premium 90\n",
         f"  Hostel private room: Budget 18 | Mid 35 | Premium 60\n",
         f"  Hostel dorm bed: Budget 8 | Mid 18 | Premium 35\n",
-        f"FOOD BUDGET RULES:\n",
-        f"- The itinerary covers {nights} days with 3 meals/day for {group_size} traveler(s). ",
-        f"food_total MUST be at least {nights * group_size * 45} {currency} ",
-        f"(= {nights} nights × {group_size} people × ~45/person/day covering breakfast ~10, lunch ~15, dinner ~20 minimum).\n",
-        "- The plan includes 6 restaurant recommendations. Budget for at least 3 sit-down meals per person at those restaurants ",
-        "(avg ~30-60/person/visit), on top of everyday meals. Do NOT underestimate food_total to fit within overall budget — "
-        "use the floor if the percentage allocation is lower.\n",
-        f"SHOPPING & MISC RULES:\n",
-        f"- shopping_misc covers: Uber/taxi rides, metro/bus passes, coffee, snacks, tips, souvenirs, entrance fees not listed as activities, SIM cards, pharmacy, laundry.\n",
-        f"- shopping_misc_total MUST be at least {nights * group_size * 20} {currency} "
-        f"(= {nights} nights × {group_size} people × ~20/person/day). Never set to 0.\n",
-        f"- Realistic target: {nights * group_size * 30}–{nights * group_size * 55} {currency}.\n",
-        f"BUDGET ALLOCATION — apply after setting realistic floors:\n",
-        f"Priority order: {priority_allocation}. Soft targets: {target_alloc}. "
-        f"These percentages guide activities and shopping only. Accommodation and food are determined by their floors first.\n",
-        "If grand_total exceeds effective budget, set within_budget=false. Do NOT compress realistic cost floors to force within_budget=true.\n",
+        f"stars field: set for hotels (3 or 4 or 5). Set to 0 for Airbnb and hostels.\n",
+        f"FOOD BUDGET RULES (food priority = {food_quality}, rank #{food_rank}):\n",
+        f"- Base food rate scales with priority:\n",
+        f"  HIGH  priority: ~{nights * group_size * 85} {currency} target "
+        f"(≈85/person/day — nicer restaurants, multi-course meals, wine, desserts).\n",
+        f"  MEDIUM priority: ~{nights * group_size * 60} {currency} target "
+        f"(≈60/person/day — mix of sit-down and casual).\n",
+        f"  LOW   priority: minimum {nights * group_size * 45} {currency} "
+        f"(≈45/person/day floor — mostly casual and street food).\n",
+        f"- Use the target matching food priority ({food_quality}) as food_total. "
+        f"Never go below the LOW floor of {nights * group_size * 45} {currency}.\n",
+        f"ACTIVITIES BUDGET (activity priority = {activity_quality}, rank #{activity_rank}):\n",
+        f"- {activity_quality} priority: "
+        + ("plan premium experiences, guided tours, entrance fees to top attractions — allocate generously.\n" if activity_quality == "HIGH"
+           else "mix of paid and free activities — moderate allocation.\n" if activity_quality == "MEDIUM"
+           else "mostly free/low-cost activities; only 1-2 paid experiences.\n"),
+        f"- activities_total target: {round(pcts.get('activities_total', 0.15) * effective_total)} {currency} "
+        f"({round(pcts.get('activities_total', 0.15) * 100)}% of effective budget).\n",
+        f"SHOPPING & MISC (shopping priority = {shopping_quality}, rank #{shopping_rank}):\n",
+        f"- shopping_misc covers: Uber/taxi, metro/bus, coffee, snacks, tips, souvenirs, SIM cards, pharmacy, laundry.\n",
+        f"- {shopping_quality} priority target: "
+        + (f"{nights * group_size * 50}–{nights * group_size * 80} {currency} (generous shopping + souvenirs).\n" if shopping_quality == "HIGH"
+           else f"{nights * group_size * 30}–{nights * group_size * 50} {currency} (moderate incidentals).\n" if shopping_quality == "MEDIUM"
+           else f"{nights * group_size * 20}–{nights * group_size * 35} {currency} (essentials only).\n"),
+        f"- shopping_misc_total must be at least {nights * group_size * 20} {currency}. Never set to 0.\n",
+        f"REMAINING BUDGET RULE: after setting all category values from the rules above, "
+        f"if the sum is below the effective budget ({effective_total} {currency}), "
+        f"allocate the surplus to the highest-ranked category (rank #{accom_rank if accom_rank < food_rank else food_rank} "
+        f"= {'accommodation' if accom_rank <= food_rank else 'food'}) by upgrading quality further.\n",
+        "If grand_total exceeds effective budget, set within_budget=false. Do NOT compress floors to force within_budget=true.\n",
         "TRANSPORT BUDGET RULES — use explicit arithmetic, never invent totals:\n",
         f"STEP 1 — determine per-person flight cost (round-trip economy) based on ACTUAL origin '{origin}' and destination '{destination}'.\n",
         "Use ONLY the origin and destination cities — do NOT infer home country from currency.\n",
