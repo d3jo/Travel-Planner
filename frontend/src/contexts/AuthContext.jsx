@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 
 const AuthContext = createContext(null);
 
@@ -11,6 +12,7 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
     try { return JSON.parse(localStorage.getItem(USER_KEY)); } catch { return null; }
   });
+  const nav = useNavigate();
 
   function login(tokenStr, userObj, rememberUsername) {
     setToken(tokenStr);
@@ -34,6 +36,16 @@ export function AuthProvider({ children }) {
   function getSavedUsername() {
     return localStorage.getItem(SAVED_USERNAME_KEY) || "";
   }
+
+  useEffect(() => {
+    function handleExpired() {
+      setToken(null);
+      setUser(null);
+      nav("/auth");
+    }
+    window.addEventListener("auth:expired", handleExpired);
+    return () => window.removeEventListener("auth:expired", handleExpired);
+  }, [nav]);
 
   return (
     <AuthContext.Provider value={{ token, user, login, logout, getSavedUsername, isLoggedIn: !!token }}>

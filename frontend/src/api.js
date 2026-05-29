@@ -85,6 +85,11 @@ async function requestWithFallback(config) {
     } catch (error) {
       lastError = error;
       const status = error?.response?.status;
+      if (status === 401) {
+        localStorage.removeItem("tp_token");
+        localStorage.removeItem("tp_user");
+        window.dispatchEvent(new CustomEvent("auth:expired"));
+      }
       const isRetryable = error?.code === "ERR_NETWORK" || !error?.response || status === 404;
       if (!isRetryable) throw error;
     }
