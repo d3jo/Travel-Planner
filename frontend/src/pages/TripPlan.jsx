@@ -139,7 +139,10 @@ export default function TripPlan() {
     try {
       await doSave();
     } catch (e) {
-      setSaveErr(e?.response?.data?.detail || "Failed to save trip.");
+      if (e?.response?.status !== 401) {
+        setSaveErr(e?.response?.data?.detail || "Failed to save trip.");
+      }
+      // 401: auth:expired event in api.js already redirects to /auth
     } finally {
       setSaving(false);
     }
@@ -148,6 +151,7 @@ export default function TripPlan() {
   async function handleShare() {
     if (!isLoggedIn) { nav("/auth"); return; }
     setSharing(true);
+    setSaveErr("");
     try {
       let tripId = savedTripId;
       if (!tripId) {
@@ -156,8 +160,11 @@ export default function TripPlan() {
       const res = await api.post(`/trips/${tripId}/share`);
       setShareUrl(`${window.location.origin}/shared/${res.data.share_token}`);
       setShowSharePopover(true);
-    } catch {
-      // silently fail — share button returns to normal
+    } catch (e) {
+      if (e?.response?.status !== 401) {
+        setSaveErr(e?.response?.data?.detail || "Failed to share trip. Please try again.");
+      }
+      // 401: auth:expired event in api.js already redirects to /auth
     } finally {
       setSharing(false);
     }
@@ -349,8 +356,21 @@ export default function TripPlan() {
             }}>
               {prefs?.destination || "Your Trip"}
             </div>
+            {prefs?.origin && (
+              <div style={{ fontSize: "0.88rem", color: "var(--text-muted)", marginTop: -2, marginBottom: 2 }}>
+                ✈️ {prefs.origin.split(",")[0]} → {prefs.destination?.split(" → ")[0]}
+              </div>
+            )}
             <div style={{ ...styles.dateRow, flexWrap: "wrap", lineHeight: 1.8 }}>
-              {prefs?.start_date} → {prefs?.end_date} · {prefs?.group_size} traveler{prefs?.group_size !== 1 ? "s" : ""} · {prefs?.budget?.toLocaleString()} {prefs?.currency}
+              {(() => {
+                const fmt = (iso) => {
+                  const [y, m, d] = iso.split("-");
+                  return new Date(+y, +m - 1, +d).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+                };
+                const s = prefs?.start_date; const e = prefs?.end_date;
+                const year = s ? s.split("-")[0] : "";
+                return s && e ? `${fmt(s)} – ${fmt(e)}, ${year}` : "";
+              })()} · {prefs?.group_size} traveler{prefs?.group_size !== 1 ? "s" : ""} · {prefs?.budget?.toLocaleString()} {prefs?.currency}
               <span style={{
                 marginLeft: 6,
                 padding: "2px 8px",

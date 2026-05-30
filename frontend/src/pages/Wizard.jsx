@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useGeneration } from "../contexts/GenerationContext";
 import { DayPicker } from "react-day-picker";
-import { AnimatePresence, motion, Reorder } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { ComposableMap, Geographies, Geography, ZoomableGroup, Marker as MapMarker } from "react-simple-maps";
 import { geoMercator } from "d3-geo";
 import "react-day-picker/dist/style.css";
@@ -24,27 +24,22 @@ function formatCityFromNominatim(item) {
 // ─── Constants ────────────────────────────────────────────────────────────────
 const TOTAL_STEPS = 2;
 
-const BUDGET_PRIORITIES = [
-  { id: "hotels",        label: "🏨 Hotels" },
-  { id: "activities",    label: "🎭 Experiences & Attractions" },
+const BUDGET_ITEMS = [
+  { id: "hotels",        label: "🏨 Accommodation" },
   { id: "food",          label: "🍽️ Food & Dining" },
+  { id: "activities",    label: "🎭 Experiences" },
   { id: "transport",     label: "🚗 Transportation" },
   { id: "shopping",      label: "🛍️ Shopping" },
   { id: "entertainment", label: "🎵 Entertainment" },
 ];
 
-const ACTIVITY_TAGS = [
-  { id: "nature",           label: "🌲 Nature" },
-  { id: "culture_history",  label: "🏛️ Culture & History" },
-  { id: "foodie",           label: "🍜 Foodie" },
-  { id: "art",              label: "🎨 Art & Museums" },
-  { id: "nightlife",        label: "🎉 Nightlife" },
-  { id: "wellness",         label: "🧘 Relaxed & Wellness" },
-  { id: "beach",            label: "🏖️ Beach & Water" },
-  { id: "shopping",         label: "🛍️ Shopping" },
-  { id: "family",           label: "👨‍👩‍👧 Family Friendly" },
-  { id: "sightseeing",      label: "📸 Iconic Sightseeing" },
-  { id: "luxury",           label: "💎 Luxury" },
+const VIBE_ITEMS = [
+  { id: "culture_history", label: "🏛️ Culture & History" },
+  { id: "nature",          label: "🌿 Nature & Outdoors" },
+  { id: "sightseeing",     label: "📸 Iconic Sightseeing" },
+  { id: "foodie",          label: "🍜 Foodie" },
+  { id: "art",             label: "🎨 Art & Museums" },
+  { id: "luxury",          label: "💎 Luxury & Comfort" },
 ];
 
 const TRIP_TYPES = [
@@ -729,7 +724,7 @@ function MapPhase({ onConfirm, initialIsMultiDest = false, initialMultiDests = [
         >
           {!isMobile && (
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <div style={mapStyles.appName}>✈️ Trip Planner AI</div>
+              <div style={mapStyles.appName}>✈️ OverseesAI</div>
             </div>
           )}
           <div style={{
@@ -1327,17 +1322,14 @@ export default function Wizard() {
   const [currency, setCurrency]   = useState("CAD");
   const [transportMode, setTransportMode] = useState("flight");
   const [accommodationType, setAccommodationType] = useState("hotel");
-  const [budgetPriorities, setBudgetPriorities] = useState(BUDGET_PRIORITIES.map(p => p.id));
-  const [activityPrefs, setActivityPrefs]       = useState([]);
+  const [topBudget, setTopBudget] = useState("hotels");
+  const [topVibes, setTopVibes]   = useState([]);
   const [tripType, setTripType]   = useState("solo");
   const [groupSize, setGroupSize] = useState(1);
   const [notes, setNotes]         = useState("");
   const { isGenerating, streamChars, genError, startGeneration, clearError } = useGeneration();
   const loading = isGenerating;
   const [err, setErr] = useState("");
-
-  const toggleTag = (list, setList, id) =>
-    setList((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
 
   const goTo = (next) => {
     setDirection(next > prevStepRef.current ? 1 : -1);
@@ -1378,8 +1370,8 @@ const handleSubmit = () => {
     start_date: toYYYYMMDD(dateRange.from),
     end_date: toYYYYMMDD(dateRange.to),
     budget: Number(budget), currency, budget_type: budgetType,
-    budget_priorities: budgetPriorities,
-    activity_preferences: activityPrefs,
+    budget_priorities: [topBudget, ...BUDGET_ITEMS.map(p => p.id).filter(id => id !== topBudget)],
+    activity_preferences: topVibes,
     trip_type: tripType, group_size: Number(groupSize),
     transport_mode: transportMode,
     accommodation_type: accommodationType,
@@ -1492,10 +1484,8 @@ const handleSubmit = () => {
               {step === 1 && (
                 <StepBox onBack={handleBack} onSubmit={handleSubmit} loading={loading} err={err || genError} isLast streamChars={streamChars}>
                   <StepPreferencesAndDetails
-                    budgetPriorities={budgetPriorities}
-                    setBudgetPriorities={setBudgetPriorities}
-                    activityPrefs={activityPrefs}
-                    toggleActivity={(id) => toggleTag(activityPrefs, setActivityPrefs, id)}
+                    topBudget={topBudget} setTopBudget={setTopBudget}
+                    topVibes={topVibes} setTopVibes={setTopVibes}
                     notes={notes} setNotes={setNotes}
                   />
                 </StepBox>
@@ -2193,78 +2183,93 @@ function StepDatesAndBudget({
 const RANK_COLORS = ["#0d9488", "#8b5cf6", "#f59e0b", "#3b82f6", "#ec4899", "#94a3b8"];
 
 function StepPreferencesAndDetails({
-  budgetPriorities, setBudgetPriorities, activityPrefs, toggleActivity, notes, setNotes,
+  topBudget, setTopBudget, topVibes, setTopVibes, notes, setNotes,
 }) {
+  const isDarkMode = useIsDarkMode();
+
+  const toggleVibe = (id) =>
+    setTopVibes(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : prev.length < 3 ? [...prev, id] : prev
+    );
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 12, paddingBottom: 6 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 16, paddingBottom: 6 }}>
       <div style={styles.stepLabel}>Step 2 of 2</div>
 
-      {/* Two-column layout */}
-      <div className="rsp-2col">
-
-        {/* ── LEFT: priorities ── */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          <div>
-            <div style={styles.stepTitle}>Rank your investment priorities</div>
-            <div style={styles.stepHint}>Drag to reorder — #1 gets the largest budget share</div>
-          </div>
-          <Reorder.Group
-            axis="y" values={budgetPriorities} onReorder={setBudgetPriorities}
-            style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 5 }}
-          >
-            {budgetPriorities.map((id, index) => {
-              const item = BUDGET_PRIORITIES.find(p => p.id === id);
-              const rankColor = RANK_COLORS[index] ?? "#94a3b8";
-              return (
-                <Reorder.Item key={id} value={id} style={{ listStyle: "none" }}
-                  initial={false}
-                  animate={{ scale: 1, boxShadow: "0px 0px 0px rgba(0,0,0,0)" }}
-                  whileDrag={{ scale: 1.03, boxShadow: "0px 10px 28px rgba(0,0,0,0.28)" }}
-                  transition={{ duration: 0.15 }}
-                >
-                  <div style={{
-                    display: "flex", alignItems: "center", gap: 12,
-                    padding: "9px 12px", borderRadius: 11,
-                    background: "var(--bg-card)", border: "1px solid var(--border-col)",
-                    cursor: "grab", userSelect: "none",
-                  }}>
-                    <div style={{
-                      minWidth: 26, height: 26, borderRadius: "50%",
-                      background: rankColor, display: "flex", alignItems: "center", justifyContent: "center",
-                      fontSize: "0.78rem", fontWeight: 900, color: "#fff", flexShrink: 0,
-                      fontFamily: '"Pixelify Sans", sans-serif',
-                    }}>{index + 1}</div>
-                    <span style={{ flex: 1, fontSize: "0.9rem", color: "var(--white)", fontWeight: 500 }}>{item?.label}</span>
-                    <span style={{ color: "var(--text-muted)", fontSize: "1rem", opacity: 0.4 }}>⠿</span>
-                  </div>
-                </Reorder.Item>
-              );
-            })}
-          </Reorder.Group>
+      {/* Budget priority */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <div>
+          <div style={styles.stepTitle}>What do you value the most?</div>
+          <div style={styles.stepHint}>Pick one — this category gets the largest budget share</div>
         </div>
-
-        {/* ── RIGHT: vibe + notes ── */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          <div>
-            <div style={styles.stepTitle}>Choose your trip vibe</div>
-            <div style={styles.stepHint}>Pick the styles you want the itinerary to focus on.</div>
-          </div>
-          <div style={styles.tagGrid}>
-            {ACTIVITY_TAGS.map((t) => (
-              <Tag key={t.id} label={t.label} selected={activityPrefs.includes(t.id)} onClick={() => toggleActivity(t.id)} />
-            ))}
-          </div>
-
-          <div>
-            <div style={styles.stepTitle}>Anything specific you want to do?</div>
-            <div style={styles.stepHint}>Restaurants, landmarks, dietary needs, accessibility…</div>
-          </div>
-          <textarea
-            placeholder="e.g. I love sushi, want to visit temples, need wheelchair access…"
-            value={notes} onChange={(e) => setNotes(e.target.value)}
-            style={styles.textarea} rows={4}
-          />
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 7 }}>
+          {BUDGET_ITEMS.map(item => {
+            const sel = topBudget === item.id;
+            return (
+              <button
+                key={item.id} type="button"
+                onClick={() => setTopBudget(item.id)}
+                style={{
+                  padding: "10px 14px", borderRadius: 11, cursor: "pointer",
+                  textAlign: "left", fontSize: "0.88rem", fontWeight: sel ? 700 : 500,
+                  fontFamily: "inherit",
+                  background: sel
+                    ? (isDarkMode ? "rgba(13,148,136,0.22)" : "rgba(13,148,136,0.12)")
+                    : "var(--bg-card)",
+                  border: sel ? "1.5px solid #0d9488" : "1px solid var(--border-col)",
+                  color: sel ? (isDarkMode ? "#7ee7d6" : "#0d6b5e") : "var(--white)",
+                  transition: "all 0.15s",
+                }}
+              >
+                {item.label}
+              </button>
+            );
+          })}
         </div>
+      </div>
+
+      {/* Trip vibe */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <div>
+          <div style={styles.stepTitle}>What's your travel style?</div>
+          <div style={styles.stepHint}>Pick up to 3</div>
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          {VIBE_ITEMS.map(item => {
+            const sel = topVibes.includes(item.id);
+            const maxed = topVibes.length >= 3 && !sel;
+            return (
+              <button
+                key={item.id} type="button"
+                onClick={() => toggleVibe(item.id)}
+                style={{
+                  padding: "9px 16px", borderRadius: 20, cursor: maxed ? "default" : "pointer",
+                  fontSize: "0.88rem", fontWeight: sel ? 700 : 400, fontFamily: "inherit",
+                  background: sel ? "var(--cal-accent)" : "var(--bg-card)",
+                  border: sel ? "1px solid var(--cal-accent)" : "1px solid var(--border-col)",
+                  color: sel ? "#fff" : maxed ? "var(--text-muted)" : "var(--white)",
+                  opacity: maxed ? 0.45 : 1,
+                  transition: "all 0.15s",
+                }}
+              >
+                {item.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Notes */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <div>
+          <div style={styles.stepTitle}>Anything specific you want to do?</div>
+          <div style={styles.stepHint}>Restaurants, landmarks, dietary needs, accessibility…</div>
+        </div>
+        <textarea
+          placeholder="e.g. I love sushi, want to visit temples, need wheelchair access…"
+          value={notes} onChange={(e) => setNotes(e.target.value)}
+          style={styles.textarea} rows={3}
+        />
       </div>
     </div>
   );
