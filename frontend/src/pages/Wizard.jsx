@@ -1322,7 +1322,7 @@ export default function Wizard() {
   const [currency, setCurrency]   = useState("CAD");
   const [transportMode, setTransportMode] = useState("flight");
   const [accommodationType, setAccommodationType] = useState("hotel");
-  const [topBudget, setTopBudget] = useState("hotels");
+  const [topBudgets, setTopBudgets] = useState(["hotels"]);
   const [topVibes, setTopVibes]   = useState([]);
   const [tripType, setTripType]   = useState("solo");
   const [groupSize, setGroupSize] = useState(1);
@@ -1370,7 +1370,7 @@ const handleSubmit = () => {
     start_date: toYYYYMMDD(dateRange.from),
     end_date: toYYYYMMDD(dateRange.to),
     budget: Number(budget), currency, budget_type: budgetType,
-    budget_priorities: [topBudget, ...BUDGET_ITEMS.map(p => p.id).filter(id => id !== topBudget)],
+    budget_priorities: [...topBudgets, ...BUDGET_ITEMS.map(p => p.id).filter(id => !topBudgets.includes(id))],
     activity_preferences: topVibes,
     trip_type: tripType, group_size: Number(groupSize),
     transport_mode: transportMode,
@@ -1484,7 +1484,7 @@ const handleSubmit = () => {
               {step === 1 && (
                 <StepBox onBack={handleBack} onSubmit={handleSubmit} loading={loading} err={err || genError} isLast streamChars={streamChars}>
                   <StepPreferencesAndDetails
-                    topBudget={topBudget} setTopBudget={setTopBudget}
+                    topBudgets={topBudgets} setTopBudgets={setTopBudgets}
                     topVibes={topVibes} setTopVibes={setTopVibes}
                     notes={notes} setNotes={setNotes}
                   />
@@ -2183,7 +2183,7 @@ function StepDatesAndBudget({
 const RANK_COLORS = ["#0d9488", "#8b5cf6", "#f59e0b", "#3b82f6", "#ec4899", "#94a3b8"];
 
 function StepPreferencesAndDetails({
-  topBudget, setTopBudget, topVibes, setTopVibes, notes, setNotes,
+  topBudgets, setTopBudgets, topVibes, setTopVibes, notes, setNotes,
 }) {
   const isDarkMode = useIsDarkMode();
 
@@ -2199,25 +2199,30 @@ function StepPreferencesAndDetails({
       {/* Budget priority */}
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         <div>
-          <div style={styles.stepTitle}>What do you value the most?</div>
-          <div style={styles.stepHint}>Pick one — this category gets the largest budget share</div>
+          <div style={styles.stepTitle}>What's your top 3 investments?</div>
+          <div style={styles.stepHint}>Pick up to 3 — these get the largest budget share</div>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 7 }}>
           {BUDGET_ITEMS.map(item => {
-            const sel = topBudget === item.id;
+            const sel = topBudgets.includes(item.id);
+            const maxed = topBudgets.length >= 3 && !sel;
             return (
               <button
                 key={item.id} type="button"
-                onClick={() => setTopBudget(item.id)}
+                onClick={() => {
+                  if (sel) setTopBudgets(topBudgets.filter(id => id !== item.id));
+                  else if (!maxed) setTopBudgets([...topBudgets, item.id]);
+                }}
                 style={{
-                  padding: "10px 14px", borderRadius: 11, cursor: "pointer",
+                  padding: "10px 14px", borderRadius: 11, cursor: maxed ? "default" : "pointer",
                   textAlign: "left", fontSize: "0.88rem", fontWeight: sel ? 700 : 500,
                   fontFamily: "inherit",
                   background: sel
                     ? (isDarkMode ? "rgba(13,148,136,0.22)" : "rgba(13,148,136,0.12)")
                     : "var(--bg-card)",
                   border: sel ? "1.5px solid #0d9488" : "1px solid var(--border-col)",
-                  color: sel ? (isDarkMode ? "#7ee7d6" : "#0d6b5e") : "var(--white)",
+                  color: sel ? (isDarkMode ? "#7ee7d6" : "#0d6b5e") : maxed ? "var(--text-muted)" : "var(--white)",
+                  opacity: maxed ? 0.45 : 1,
                   transition: "all 0.15s",
                 }}
               >

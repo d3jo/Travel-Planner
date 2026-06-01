@@ -56,8 +56,15 @@ export default function TripPlan() {
   const { token } = useParams();
   const isSharedView = !!token;
 
-  const locPlan = loc.state?.plan;
-  const locPrefs = loc.state?.preferences;
+  // Restore plan from sessionStorage if location state was lost during auth redirect
+  const locPlan = loc.state?.plan ?? (() => {
+    try { const s = sessionStorage.getItem("pendingPlan"); if (s) { sessionStorage.removeItem("pendingPlan"); return JSON.parse(s); } } catch { /* ignore */ }
+    return null;
+  })();
+  const locPrefs = loc.state?.preferences ?? (() => {
+    try { const s = sessionStorage.getItem("pendingPrefs"); if (s) { sessionStorage.removeItem("pendingPrefs"); return JSON.parse(s); } } catch { /* ignore */ }
+    return null;
+  })();
 
   const [sharedPlan, setSharedPlan] = useState(null);
   const [sharedPrefs, setSharedPrefs] = useState(null);
@@ -132,8 +139,16 @@ export default function TripPlan() {
     return res.data.id;
   }
 
+  function navToAuth() {
+    try {
+      if (locPlan) sessionStorage.setItem("pendingPlan", JSON.stringify(locPlan));
+      if (locPrefs) sessionStorage.setItem("pendingPrefs", JSON.stringify(locPrefs));
+    } catch { /* ignore */ }
+    nav("/auth", { state: { returnTo: "/plan" } });
+  }
+
   async function handleSave() {
-    if (!isLoggedIn) { nav("/auth"); return; }
+    if (!isLoggedIn) { navToAuth(); return; }
     setSaving(true);
     setSaveErr("");
     try {
@@ -149,7 +164,7 @@ export default function TripPlan() {
   }
 
   async function handleShare() {
-    if (!isLoggedIn) { nav("/auth"); return; }
+    if (!isLoggedIn) { navToAuth(); return; }
     setSharing(true);
     setSaveErr("");
     try {
@@ -1166,7 +1181,7 @@ function BudgetRow({ item, total, currency, nights, groupSize, perPersonMode, tr
   const primaryVal = item.displayValue != null ? item.displayValue : (perPersonMode ? perPersonVal : item.value);
   const mathNote = budgetMathNote(item.key, item.value, currency, nights, groupSize);
 
-  const hasRange = item.key === "transport" && item.range?.min != null && item.range?.max != null && item.range.min !== item.range.max;
+  const hasRange = item.range?.min != null && item.range?.max != null && item.range.min !== item.range.max;
   // range and breakdown are already pre-divided to the correct mode in TabBudget
   const dispRangeMin = hasRange ? item.range.min : null;
   const dispRangeMax = hasRange ? item.range.max : null;
@@ -1201,9 +1216,7 @@ function BudgetRow({ item, total, currency, nights, groupSize, perPersonMode, tr
             <>
               <div style={{ color: "var(--text-muted)", fontSize: "0.88rem" }}>
                 {currency} {dispRangeMin.toLocaleString()} – {dispRangeMax.toLocaleString()}
-              </div>
-              <div style={{ color: "var(--text-muted)", fontSize: "0.72rem", opacity: 0.55 }}>
-                est. midpoint {currency} {primaryVal.toLocaleString()}{perPersonMode ? " /person" : ""}
+                {perPersonMode && <span style={{ fontSize: "0.72rem", opacity: 0.65, marginLeft: 3 }}>/person</span>}
               </div>
             </>
           ) : (
@@ -1313,16 +1326,35 @@ function TabBudget({ budget, prefs }) {
   const total = grandTotal || 1;
   const grandPerPerson = Math.round(grandTotal / groupSize);
 
-  // ±10% confidence range
-  const rangeMin = Math.round(grandTotal * 0.9);
-  const rangeMax = Math.round(grandTotal * 1.1);
-  const rangeMinPP = Math.round(rangeMin / groupSize);
-  const rangeMaxPP = Math.round(rangeMax / groupSize);
+  // Build per-category ranges and sum them for the grand range
+  const scale = perPersonMode ? 1 / groupSize : 1;
+  function catRange(rangeField, totalField) {
+    const r = budget[rangeField];
+    const t = budget[totalField] || 0;
+    if (r?.min != null && r?.max != null && r.min !== r.max) {
+      return { min: Math.round(r.min * scale), max: Math.round(r.max * scale) };
+    }
+    // Fallback: ±15% of total if range not provided
+    const pp = Math.round(t * scale);
+    return { min: Math.round(pp * 0.85), max: Math.round(pp * 1.15) };
+  }
+  const hotelsRange     = catRange("hotels_range",      "hotels_total");
+  const activitiesRange = catRange("activities_range",  "activities_total");
+  const foodRange       = catRange("food_range",        "food_total");
+  const shoppingRange   = catRange("shopping_misc_range","shopping_misc_total");
+  // Transport range already computed above (transportRange)
+  const tRangeMin = transportRange ? transportRange.min : Math.round(Math.round(transportTotal * scale) * 0.9);
+  const tRangeMax = transportRange ? transportRange.max : Math.round(Math.round(transportTotal * scale) * 1.1);
+
+  const rangeMinPP = hotelsRange.min + activitiesRange.min + foodRange.min + tRangeMin + shoppingRange.min;
+  const rangeMaxPP = hotelsRange.max + activitiesRange.max + foodRange.max + tRangeMax + shoppingRange.max;
+  const rangeMin = perPersonMode ? rangeMinPP * groupSize : rangeMinPP;
+  const rangeMax = perPersonMode ? rangeMaxPP * groupSize : rangeMaxPP;
 
   const enteredTotal = prefs?.budget
     ? (perPersonMode ? prefs.budget * groupSize : prefs.budget)
     : null;
-  // Within budget if user's budget falls anywhere inside the ±10% range
+  // Within budget if user's budget falls inside the summed category range
   const isWithinBudget = enteredTotal != null
     ? enteredTotal >= rangeMin && enteredTotal <= rangeMax
     : true;
@@ -1332,13 +1364,17 @@ function TabBudget({ budget, prefs }) {
   const accomLabel = ACCOMMODATION_TAB_LABELS[prefs?.accommodation_type] || "Hotels";
 
   const items = [
-    { key: "hotels",   label: `${accomIcon} ${accomLabel}`,  value: budget.hotels_total,        color: "#0d9488" },
-    { key: "activities", label: "🎭 Experiences & Attractions", value: budget.activities_total, color: "#8b5cf6" },
-    { key: "food",     label: "🍽️ Food",            value: budget.food_total,          color: "#f59e0b" },
+    { key: "hotels",   label: `${accomIcon} ${accomLabel}`,  value: budget.hotels_total,
+      displayValue: Math.round((budget.hotels_total || 0) * scale), range: hotelsRange, color: "#0d9488" },
+    { key: "activities", label: "🎭 Experiences & Attractions", value: budget.activities_total,
+      displayValue: Math.round((budget.activities_total || 0) * scale), range: activitiesRange, color: "#8b5cf6" },
+    { key: "food",     label: "🍽️ Food",            value: budget.food_total,
+      displayValue: Math.round((budget.food_total || 0) * scale), range: foodRange, color: "#f59e0b" },
     { key: "transport",label: "🚗 Transportation",   value: transportTotal,             color: "#3b82f6",
       displayValue: perPersonMode ? Math.round(transportTotal / groupSize) : transportTotal,
-      range: transportRange, breakdown: transportBreakdown },
-    { key: "shopping", label: "🛍️ Shopping, Misc & Incidentals", value: budget.shopping_misc_total || 0, color: "#ec4899", alwaysShow: true },
+      range: transportRange ?? { min: tRangeMin, max: tRangeMax }, breakdown: transportBreakdown },
+    { key: "shopping", label: "🛍️ Shopping, Misc & Incidentals", value: budget.shopping_misc_total || 0,
+      displayValue: Math.round((budget.shopping_misc_total || 0) * scale), range: shoppingRange, color: "#ec4899", alwaysShow: true },
   ].filter((i) => i.value > 0 || i.alwaysShow);
 
   const PRIORITY_LABELS = {

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "../contexts/AuthContext";
 import api from "../api";
@@ -7,13 +7,15 @@ import api from "../api";
 export default function Auth() {
   const { login, isLoggedIn, getSavedUsername } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const returnTo = location.state?.returnTo || "/";
   const [tab, setTab] = useState("login");
   const [form, setForm] = useState({ username: "", email: "", password: "", remember: true });
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (isLoggedIn) navigate("/", { replace: true });
+    if (isLoggedIn) navigate(returnTo, { replace: true });
   }, [isLoggedIn]);
 
   useEffect(() => {
@@ -38,7 +40,7 @@ export default function Auth() {
 
       const res = await api.post(endpoint, body);
       login(res.data.access_token, { username: res.data.username, email: res.data.email }, form.remember);
-      navigate("/", { replace: true });
+      navigate(returnTo, { replace: true });
     } catch (e) {
       setErr(e?.response?.data?.detail || "Something went wrong.");
     } finally {

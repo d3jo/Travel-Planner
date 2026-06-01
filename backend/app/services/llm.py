@@ -66,11 +66,13 @@ def _default_trip_plan(raw_text: str) -> Dict[str, Any]:
         "itinerary": [],
         "weekly_plan": [],
         "budget_breakdown": {
-            "hotels_total": 0, "activities_total": 0, "food_total": 0,
+            "hotels_total": 0, "hotels_range": {"min": 0, "max": 0},
+            "activities_total": 0, "activities_range": {"min": 0, "max": 0},
+            "food_total": 0, "food_range": {"min": 0, "max": 0},
             "transport_total": 0,
             "transport_range": {"min": 0, "max": 0},
             "transport_breakdown": {"international": {"min": 0, "max": 0, "note": ""}, "local": 0},
-            "shopping_misc_total": 0,
+            "shopping_misc_total": 0, "shopping_misc_range": {"min": 0, "max": 0},
             "grand_total": 0, "within_budget": True, "savings_tip": ""
         },
         "local_tips": [],
@@ -327,11 +329,14 @@ def _build_trip_plan_prompt(preferences: Dict[str, Any]) -> tuple[str, str]:
         f'"activities":[{activities_schema}],',
         f'"food_spots":[{food_spots_schema}],',
         schedule_schema,
-        '"budget_breakdown":{"hotels_total":num,"activities_total":num,"food_total":num,',
+        '"budget_breakdown":{"hotels_total":num,"hotels_range":{"min":num,"max":num},',
+        '"activities_total":num,"activities_range":{"min":num,"max":num},',
+        '"food_total":num,"food_range":{"min":num,"max":num},',
         '"transport_total":num,',
         '"transport_range":{"min":num,"max":num},',
         '"transport_breakdown":{"international":{"min":num,"max":num,"note":str},"local":num},',
-        '"shopping_misc_total":num,"grand_total":num,"within_budget":bool,"savings_tip":str},',
+        '"shopping_misc_total":num,"shopping_misc_range":{"min":num,"max":num},',
+        '"grand_total":num,"within_budget":bool,"savings_tip":str},',
         '"transportation_options":[{"type":str,"cabin":str,"durationEstimate":str,"why":str,"priceEstimate":{"min":num,"max":num,"currency":str,"confidence":str,"source":"llm_fallback"},"notes":[str]}],',
         '"local_tips":[str],"recommended_places":[{"name":str,"category":str,"why":str,"neighborhood":str}],',
         '"must_try_foods":[{"type":str,"dish":str}],"weather_note":str,"currency_note":str}\n',
@@ -482,7 +487,13 @@ def _build_trip_plan_prompt(preferences: Dict[str, Any]) -> tuple[str, str]:
         f"TRANSPORT MODE TO DESTINATION: {transport_mode} (from {origin} to {destination})\n"
         f"ADDITIONAL NOTES: {additional_notes or 'None'}\n\n"
         "Generate a complete trip plan as JSON. Use EFFECTIVE TOTAL BUDGET for hotels/activities/food/shopping allocations. "
-        "transport_total MUST be derived from the transport pricing rules (midpoint of international range + local), not from the budget percentage."
+        "transport_total MUST be derived from the transport pricing rules (midpoint of international range + local), not from the budget percentage.\n"
+        "For each non-transport category, set _total to the realistic midpoint and _range.min/max as follows:\n"
+        "  hotels_range: min = budget option within tier (lower quarter), max = nicer option within tier (upper quarter).\n"
+        "  activities_range: min = fewer/free activities, max = more paid experiences.\n"
+        "  food_range: min = mostly street food / casual, max = mix of upscale restaurants.\n"
+        "  shopping_misc_range: min = minimal shopping, max = active shopping. Range ~±20-30% of total.\n"
+        "grand_total = hotels_total + activities_total + food_total + transport_total + shopping_misc_total."
     )
 
     return instructions, user_input
