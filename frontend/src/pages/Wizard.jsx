@@ -1436,9 +1436,27 @@ const handleSubmit = () => {
 
   return (
     <motion.div key="form" initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.45, ease: "easeOut" }} style={styles.wrap}
+      transition={{ duration: 0.45, ease: "easeOut" }} style={{ ...styles.wrap, position: "relative" }}
     >
-      <div style={styles.content}>
+      {/* Atmospheric background clouds */}
+      {[
+        { top: "5%",  left: "3%",   size: 72, dur: 8,   delay: 0   },
+        { top: "10%", right: "5%",  size: 58, dur: 9.5, delay: 2.1 },
+        { top: "42%", left: "1%",   size: 52, dur: 10,  delay: 1.2 },
+        { top: "62%", right: "3%",  size: 64, dur: 8.5, delay: 3.0 },
+        { top: "82%", left: "14%",  size: 44, dur: 9,   delay: 0.6 },
+        { top: "28%", right: "12%", size: 36, dur: 11,  delay: 1.7 },
+      ].map((c, i) => (
+        <motion.div
+          key={`bgcloud-${i}`}
+          animate={{ y: [0, -14, 0], opacity: [0.04, 0.075, 0.04] }}
+          transition={{ duration: c.dur, repeat: Infinity, delay: c.delay, ease: "easeInOut" }}
+          style={{ position: "absolute", top: c.top, left: c.left, right: c.right, pointerEvents: "none", zIndex: 0 }}
+        >
+          <CloudSVG size={c.size} color="rgba(13,148,136,1)" />
+        </motion.div>
+      ))}
+      <div style={{ ...styles.content, position: "relative", zIndex: 1 }}>
         {/* Header */}
         <div style={styles.header}>
           <div style={styles.title}>📍 {destination}</div>
@@ -2280,6 +2298,22 @@ function StepPreferencesAndDetails({
   );
 }
 
+function AirplaneSVG({ size = 32, color = "currentColor" }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
+      <path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/>
+    </svg>
+  );
+}
+
+function CloudSVG({ size = 40, color = "currentColor" }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
+      <path d="M19.35 10.04A7.49 7.49 0 0 0 12 4C9.11 4 6.6 5.64 5.35 8.04A5.994 5.994 0 0 0 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z"/>
+    </svg>
+  );
+}
+
 function CityLoadingOverlay() {
   const msgs = [
     "Scouting the top cities...",
@@ -2295,24 +2329,49 @@ function CityLoadingOverlay() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "18px 12px 14px", gap: 12 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-        <motion.span
-          animate={{ rotate: 360 }}
-          transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
-          style={{ fontSize: "1.3rem", display: "inline-block", opacity: 0.7 }}
-        >⚙️</motion.span>
+      {/* Sky flight scene */}
+      <div style={{ position: "relative", width: 200, height: 60, overflow: "hidden" }}>
+        {/* Contrail */}
+        <div style={{
+          position: "absolute", top: "50%", left: 20, right: 20, height: 1,
+          background: "linear-gradient(90deg, transparent, rgba(13,148,136,0.28), transparent)",
+          transform: "translateY(-50%)",
+        }} />
+        {/* Left cloud */}
         <motion.div
-          animate={{ y: [0, -8, 0], rotate: [0, -4, 4, 0] }}
-          transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
-          style={{ fontSize: "2.8rem", lineHeight: 1, filter: "drop-shadow(0 0 12px rgba(13,148,136,0.55))" }}
-        >🤖</motion.div>
-        <motion.span
-          animate={{ rotate: -360 }}
-          transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
-          style={{ fontSize: "1.3rem", display: "inline-block", opacity: 0.7 }}
-        >⚙️</motion.span>
+          animate={{ x: [0, -3, 0], opacity: [0.45, 0.68, 0.45] }}
+          transition={{ duration: 3.4, repeat: Infinity, ease: "easeInOut" }}
+          style={{ position: "absolute", left: -4, top: "50%", transform: "translateY(-50%)" }}
+        >
+          <CloudSVG size={36} color="rgba(13,148,136,0.45)" />
+        </motion.div>
+        {/* Right cloud */}
+        <motion.div
+          animate={{ x: [0, 3, 0], opacity: [0.4, 0.62, 0.4] }}
+          transition={{ duration: 3.9, repeat: Infinity, ease: "easeInOut", delay: 0.5 }}
+          style={{ position: "absolute", right: -4, top: "50%", transform: "translateY(-50%)" }}
+        >
+          <CloudSVG size={30} color="rgba(14,165,233,0.38)" />
+        </motion.div>
+        {/* Airplane flying back and forth */}
+        <motion.div
+          animate={{
+            x: [-58, 58, 58, -58, -58],
+            rotate: [90, 90, -90, -90, 90],
+          }}
+          transition={{
+            duration: 3.0,
+            times: [0, 0.44, 0.56, 0.94, 1],
+            repeat: Infinity,
+            ease: "easeInOut",
+          }}
+          style={{ position: "absolute", top: "50%", left: "50%", marginTop: -13, marginLeft: -13, filter: "drop-shadow(0 0 8px rgba(13,148,136,0.7))" }}
+        >
+          <AirplaneSVG size={26} color="#0d9488" />
+        </motion.div>
       </div>
 
+      {/* Message */}
       <div style={{ height: 22, display: "flex", alignItems: "center", overflow: "hidden" }}>
         <AnimatePresence mode="wait">
           <motion.div
@@ -2328,13 +2387,14 @@ function CityLoadingOverlay() {
         </AnimatePresence>
       </div>
 
-      <div style={{ display: "flex", gap: 4 }}>
-        {[0, 1, 2, 3, 4].map((i) => (
+      {/* Runway-style dashes */}
+      <div style={{ display: "flex", gap: 5 }}>
+        {[0, 1, 2, 3, 4, 5].map((i) => (
           <motion.div
             key={i}
-            animate={{ scaleY: [0.4, 1.4, 0.4], opacity: [0.35, 1, 0.35] }}
-            transition={{ duration: 0.9, repeat: Infinity, delay: i * 0.15, ease: "easeInOut" }}
-            style={{ width: 5, height: 16, borderRadius: 3, background: "var(--cal-accent)", transformOrigin: "center" }}
+            animate={{ opacity: [0.18, 1, 0.18] }}
+            transition={{ duration: 1.1, repeat: Infinity, delay: i * 0.16, ease: "easeInOut" }}
+            style={{ width: 16, height: 3, borderRadius: 2, background: "var(--cal-accent)" }}
           />
         ))}
       </div>
@@ -2344,13 +2404,13 @@ function CityLoadingOverlay() {
 
 function GeneratingOverlay({ chars = 0 }) {
   const msgs = [
+    "Charting your flight path...",
     "Researching the best hotels for you...",
-    "Mapping out your day-by-day itinerary...",
-    "Hunting down top restaurants...",
-    "Crunching the numbers on your budget...",
-    "Discovering local hidden gems...",
-    "Scouting activities that match your style...",
-    "Finalizing your perfect trip plan...",
+    "Mapping your day-by-day adventure...",
+    "Discovering top restaurants & cafés...",
+    "Estimating your travel budget...",
+    "Finding hidden local gems...",
+    "Your perfect trip is almost ready...",
   ];
   const [msgIdx, setMsgIdx] = useState(0);
   useEffect(() => {
@@ -2364,7 +2424,7 @@ function GeneratingOverlay({ chars = 0 }) {
     { icon: "🏨", label: "Hotels" },
     { icon: "🎭", label: "Activities" },
     { icon: "🍽️", label: "Food" },
-    { icon: "📅", label: "Itinerary" },
+    { icon: "🗺️", label: "Routes" },
     { icon: "💰", label: "Budget" },
   ];
   const activeStep = Math.min(STEPS.length - 1, Math.floor((pct / 98) * STEPS.length));
@@ -2390,35 +2450,56 @@ function GeneratingOverlay({ chars = 0 }) {
         gap: 16,
       }}>
 
-        {/* Robot + orbiting dots */}
+        {/* Sky scene: floating clouds + airplane */}
         <div style={{ position: "relative", width: 120, height: 120, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          {/* Floating background clouds */}
+          {[
+            { top: "14%", left: "8%",  size: 32, dur: 4.2, delay: 0,   alpha: 0.17 },
+            { top: "12%", left: "58%", size: 26, dur: 5.0, delay: 1.3, alpha: 0.13 },
+            { top: "62%", left: "6%",  size: 28, dur: 4.8, delay: 0.7, alpha: 0.15 },
+            { top: "68%", left: "56%", size: 22, dur: 5.6, delay: 1.9, alpha: 0.11 },
+          ].map((c, i) => (
+            <motion.div
+              key={`cloud-${i}`}
+              animate={{ y: [0, -9, 0], opacity: [c.alpha, c.alpha * 1.7, c.alpha] }}
+              transition={{ duration: c.dur, repeat: Infinity, delay: c.delay, ease: "easeInOut" }}
+              style={{ position: "absolute", top: c.top, left: c.left, pointerEvents: "none" }}
+            >
+              <CloudSVG size={c.size} color="#0ea5e9" />
+            </motion.div>
+          ))}
+          {/* Orbiting contrail dots */}
           {[0, 1, 2, 3].map((i) => (
             <motion.div
-              key={i}
+              key={`dot-${i}`}
               animate={{ rotate: 360 }}
-              transition={{ duration: 3 + i * 0.8, repeat: Infinity, ease: "linear", delay: i * 0.4 }}
+              transition={{ duration: 3.6 + i * 0.7, repeat: Infinity, ease: "linear", delay: i * 0.35 }}
               style={{ position: "absolute", inset: 0, display: "flex", alignItems: "flex-start", justifyContent: "center" }}
             >
               <motion.div
-                animate={{ scale: [0.7, 1.2, 0.7], opacity: [0.4, 1, 0.4] }}
-                transition={{ duration: 1.5, repeat: Infinity, delay: i * 0.3 }}
+                animate={{ scale: [0.6, 1.3, 0.6], opacity: [0.3, 0.9, 0.3] }}
+                transition={{ duration: 1.4, repeat: Infinity, delay: i * 0.3 }}
                 style={{
-                  width: 8, height: 8, borderRadius: "50%", marginTop: i * 6,
-                  background: i % 2 === 0 ? "var(--cal-accent)" : "rgba(255,255,255,0.4)",
+                  width: 7, height: 7, borderRadius: "50%", marginTop: i * 5,
+                  background: i % 2 === 0 ? "#0d9488" : "rgba(14,165,233,0.75)",
                 }}
               />
             </motion.div>
           ))}
+          {/* Pulsing glow ring */}
           <motion.div
-            animate={{ scale: [1, 1.18, 1], opacity: [0.15, 0.35, 0.15] }}
-            transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-            style={{ position: "absolute", inset: 10, borderRadius: "50%", border: "2px solid var(--cal-accent)" }}
+            animate={{ scale: [1, 1.2, 1], opacity: [0.1, 0.28, 0.1] }}
+            transition={{ duration: 2.1, repeat: Infinity, ease: "easeInOut" }}
+            style={{ position: "absolute", inset: 8, borderRadius: "50%", border: "1.5px solid #0ea5e9" }}
           />
+          {/* Central airplane */}
           <motion.div
-            animate={{ y: [0, -8, 0], rotate: [0, -3, 3, 0] }}
-            transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
-            style={{ fontSize: "4rem", lineHeight: 1, filter: "drop-shadow(0 0 16px rgba(13,148,136,0.6))", zIndex: 1 }}
-          >🤖</motion.div>
+            animate={{ y: [0, -10, 0], rotate: [0, -4, 4, 0] }}
+            transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
+            style={{ filter: "drop-shadow(0 0 18px rgba(13,148,136,0.75))", zIndex: 1 }}
+          >
+            <AirplaneSVG size={54} color="#0d9488" />
+          </motion.div>
         </div>
 
         {/* Percentage */}
@@ -2480,7 +2561,7 @@ function GeneratingOverlay({ chars = 0 }) {
         <defs>
           <linearGradient id="arcGrad" x1="0%" y1="0%" x2="100%" y2="0%">
             <stop offset="0%" stopColor="#0d9488" />
-            <stop offset="100%" stopColor="#0891b2" />
+            <stop offset="100%" stopColor="#0ea5e9" />
           </linearGradient>
         </defs>
         <circle cx={SIZE / 2} cy={SIZE / 2} r={R} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={3} />
