@@ -1535,42 +1535,46 @@ function TabBudget({ budget, prefs }) {
             );
           })()}
           {(() => {
-            const gs = prefs.group_size ?? 1;
-            const enteredTotal = prefs.budget_type === "per_person"
-              ? prefs.budget * gs
-              : prefs.budget;
-            const diff = enteredTotal - grandTotal;
-            const pct = enteredTotal > 0 ? Math.abs(diff) / enteredTotal : 0;
-            if (pct < 0.08) return null;
-            const isUnder = diff > 0;
-            const dispDiff = perPersonMode ? Math.round(Math.abs(diff) / gs) : Math.round(Math.abs(diff));
-            const diffLabel = perPersonMode ? `${prefs.currency} ${dispDiff.toLocaleString()}/person` : `${prefs.currency} ${dispDiff.toLocaleString()}`;
+            if (!prefs.budget) return null;
+            const enteredBudgetPP = perPersonMode ? prefs.budget : prefs.budget / groupSize;
 
-            const categoryNames = { hotels: "Hotels", activities: "Activities", food: "Food & Dining", transport: "Transportation", shopping: "Shopping & Misc" };
-            const userPriorities = new Set((prefs?.budget_priorities || []).map(p => p.toLowerCase()));
-            const nonPriority = Object.entries(categoryNames)
-              .filter(([key]) => !userPriorities.has(key))
-              .map(([, name]) => name);
-            const upgradeTargets = nonPriority.length > 0
-              ? nonPriority.slice(0, 3).join(", ")
-              : "other categories";
+            if (enteredBudgetPP >= rangeMinPP && enteredBudgetPP <= rangeMaxPP) {
+              return (
+                <div style={{
+                  marginTop: 14, padding: "10px 14px", borderRadius: 10,
+                  background: "rgba(16,185,129,0.08)",
+                  border: "1px solid rgba(16,185,129,0.3)",
+                  fontSize: "0.84rem", color: "var(--white)", lineHeight: 1.55,
+                }}>
+                  <span style={{ fontWeight: 700, color: "#10b981" }}>✅ </span>
+                  Your budget is within the estimated range — you're on track!
+                </div>
+              );
+            }
+
+            const isUnder = enteredBudgetPP < rangeMinPP;
+            const diffPP = isUnder ? Math.round(rangeMinPP - enteredBudgetPP) : Math.round(enteredBudgetPP - rangeMaxPP);
+            const diffTotal = Math.round(diffPP * groupSize);
+            const diffLabel = perPersonMode
+              ? `${prefs.currency} ${diffPP.toLocaleString()}/person`
+              : `${prefs.currency} ${diffTotal.toLocaleString()}`;
 
             return (
               <div style={{
                 marginTop: 14, padding: "10px 14px", borderRadius: 10,
-                background: isUnder ? "rgba(56,189,248,0.08)" : "rgba(239,68,68,0.08)",
-                border: `1px solid ${isUnder ? "rgba(56,189,248,0.3)" : "rgba(239,68,68,0.3)"}`,
+                background: isUnder ? "rgba(239,68,68,0.08)" : "rgba(56,189,248,0.08)",
+                border: `1px solid ${isUnder ? "rgba(239,68,68,0.3)" : "rgba(56,189,248,0.3)"}`,
                 fontSize: "0.84rem", color: "var(--white)", lineHeight: 1.55,
               }}>
                 {isUnder ? (
                   <>
-                    <span style={{ fontWeight: 700, color: "#38bdf8" }}>ℹ️ </span>
-                    Your budget is about <strong>~{diffLabel} over</strong> the estimated trip cost — there's room to upgrade.
+                    <span style={{ fontWeight: 700, color: "#f87171" }}>⚠️ </span>
+                    Your budget is around <strong>~{diffLabel} under</strong> the estimated trip cost.
                   </>
                 ) : (
                   <>
-                    <span style={{ fontWeight: 700, color: "#f87171" }}>⚠️ </span>
-                    Your budget is around <strong>~{diffLabel} under</strong> the estimated trip cost.
+                    <span style={{ fontWeight: 700, color: "#38bdf8" }}>ℹ️ </span>
+                    Your budget is about <strong>~{diffLabel} over</strong> the estimated trip cost — there's room to upgrade.
                   </>
                 )}
               </div>
