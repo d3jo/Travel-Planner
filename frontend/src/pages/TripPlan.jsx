@@ -1175,7 +1175,7 @@ function budgetMathNote(key, value, currency, nights, groupSize) {
 
 function BudgetRow({ item, total, currency, nights, groupSize, perPersonMode, transportMode }) {
   const [hovered, setHovered] = useState(false);
-  const pct = Math.round((item.value / total) * 100);
+  const pct = item.pct ?? Math.round((item.value / total) * 100);
   const perPersonVal = Math.round(item.value / groupSize);
   // transport uses pre-divided displayValue; other items divide here
   const primaryVal = item.displayValue != null ? item.displayValue : (perPersonMode ? perPersonVal : item.value);
@@ -1376,6 +1376,16 @@ function TabBudget({ budget, prefs }) {
     { key: "shopping", label: "🛍️ Shopping, Misc & Incidentals", value: budget.shopping_misc_total || 0,
       displayValue: Math.round((budget.shopping_misc_total || 0) * scale), range: shoppingRange, color: "#ec4899", alwaysShow: true },
   ].filter((i) => i.value > 0 || i.alwaysShow);
+
+  // Compute bar percentages from displayed range midpoints so bars match the visible numbers
+  const rangeMidSum = items.reduce((sum, item) => {
+    const mid = item.range?.min != null ? (item.range.min + item.range.max) / 2 : (item.displayValue || 0);
+    return sum + mid;
+  }, 0) || 1;
+  items.forEach(item => {
+    const mid = item.range?.min != null ? (item.range.min + item.range.max) / 2 : (item.displayValue || 0);
+    item.pct = Math.round(mid / rangeMidSum * 100);
+  });
 
   const PRIORITY_LABELS = {
     hotels: "🏨 Hotels", activities: "🎭 Experiences & Attractions", food: "🍽️ Food & Dining",
