@@ -108,7 +108,8 @@ function formatDateRange(range) {
   const fmt = (d) => d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
   if (!range.to) return fmt(range.from) + " → ?";
   const nights = Math.round((range.to - range.from) / 86400000);
-  return `${fmt(range.from)} → ${fmt(range.to)} (${nights} night${nights !== 1 ? "s" : ""})`;
+  const label = nights === 0 ? "1 day" : `${nights} night${nights !== 1 ? "s" : ""}`;
+  return `${fmt(range.from)} → ${fmt(range.to)} (${label})`;
 }
 
 // ─── Location Input (origin, dropdown-only) ──────────────────────────────────
@@ -1726,9 +1727,12 @@ function StepDatesAndBudget({
   const inputBg     = isDarkMode ? "rgba(255,255,255,0.04)" : "rgba(168,207,223,0.12)";
   const panelBorder = isDarkMode ? "1px solid rgba(255,255,255,0.12)" : "1px solid rgba(168,207,223,0.35)";
 
-  const tripDays = dateRange.from && dateRange.to
+  // tripNights = overnight stays (0 for same-day trips)
+  // tripDays   = inclusive calendar days (1 for same-day trips, 2 for 1-night, …)
+  const tripNights = dateRange.from && dateRange.to
     ? Math.round((dateRange.to - dateRange.from) / (1000 * 60 * 60 * 24))
     : null;
+  const tripDays = tripNights !== null ? tripNights + 1 : null;
   const minDaysPerCity = 2;
   const idealDaysPerCity = 3;
   const paceTooTight = isMultiDestTrip && tripDays !== null && tripDays < destinations.length * minDaysPerCity;
@@ -2081,7 +2085,7 @@ function StepDatesAndBudget({
           </div>
 
           {/* ── Day Distribution — lives under the calendar for spatial coordination ── */}
-          {isMultiDestTrip && tripDays > 0 && (
+          {isMultiDestTrip && tripDays !== null && tripNights > 0 && (
             <div style={{
               borderTop: isDarkMode ? "1px solid rgba(255,255,255,0.07)" : "1px solid rgba(168,207,223,0.25)",
               paddingTop: 10, display: "flex", flexDirection: "column", gap: 8,
@@ -2116,7 +2120,7 @@ function StepDatesAndBudget({
                   border: isDarkMode ? "1px solid rgba(13,148,136,0.2)" : "1px solid rgba(13,148,136,0.15)",
                 }}>
                   <span style={{ fontSize: "1rem" }}>✨</span>
-                  <span>The agent will optimally distribute <strong style={{ color: "var(--white)" }}>{tripDays} night{tripDays !== 1 ? "s" : ""}</strong> across {destinations.length} cities.</span>
+                  <span>The agent will optimally distribute <strong style={{ color: "var(--white)" }}>{tripNights === 0 ? "1 day" : `${tripNights} night${tripNights !== 1 ? "s" : ""}`}</strong> across {destinations.length} cities.</span>
                 </div>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -2330,7 +2334,7 @@ function CityLoadingOverlay() {
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "18px 12px 14px", gap: 12 }}>
       {/* Sky flight scene */}
-      <div style={{ position: "relative", width: 200, height: 60, overflow: "hidden" }}>
+      <div style={{ position: "relative", width: "min(200px, 90vw)", height: 60, overflow: "hidden" }}>
         {/* Contrail */}
         <div style={{
           position: "absolute", top: "50%", left: 20, right: 20, height: 1,
@@ -2596,9 +2600,9 @@ const mapStyles = {
   heroTitle: { fontSize: "1.9rem", fontWeight: 900, fontFamily: '"Pixelify Sans", sans-serif', lineHeight: 1.2 },
   heroHint: { fontSize: "0.82rem", marginBottom: 6 },
   searchWrap: { position: "relative", width: "100%" },
-  searchRow: { display: "flex", alignItems: "center", gap: 8, borderRadius: 12, padding: "10px 14px" },
+  searchRow: { display: "flex", alignItems: "center", gap: 8, borderRadius: 12, padding: "0 14px" },
   searchIcon: { fontSize: "1rem", flexShrink: 0 },
-  searchInput: { flex: 1, background: "transparent", border: "none", outline: "none", fontSize: "1rem", fontFamily: "inherit" },
+  searchInput: { flex: 1, background: "transparent", border: "none", outline: "none", fontSize: "1rem", fontFamily: "inherit", minHeight: 44 },
   searchSpinner: { fontSize: "0.85rem", flexShrink: 0 },
   suggestionList: {
     position: "absolute", top: "calc(100% + 6px)", left: 0, right: 0,

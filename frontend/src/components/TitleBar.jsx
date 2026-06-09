@@ -30,9 +30,9 @@ export default function TitleBar() {
             title={isDark ? "Switch to light mode" : "Switch to dark mode"}
             style={{
               ...styles.themeBtn,
-              padding: isMobile ? "6px 10px" : "6px 14px",
+              padding: isMobile ? "10px 10px" : "10px 14px",
               gap: isMobile ? 4 : 6,
-              minHeight: 36,
+              minHeight: 44,
             }}
           >
             {isDark ? "☀️" : "🌙"}
@@ -93,7 +93,9 @@ const styles = {
     display: "flex",
     alignItems: "center",
     gap: 6,
-    padding: "6px 14px",
+    padding: "10px 14px",
+    minHeight: 44,
+    minWidth: 44,
     borderRadius: 999,
     border: "1px solid var(--border-col)",
     background: "var(--bg-card)",

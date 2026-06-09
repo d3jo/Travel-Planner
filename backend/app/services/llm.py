@@ -180,12 +180,12 @@ def _build_trip_plan_prompt(preferences: Dict[str, Any]) -> tuple[str, str]:
     effective_total = budget * group_size if budget_type == "per_person" else budget
     per_person = budget if budget_type == "per_person" else (budget / max(group_size, 1))
 
-    # Compute number of nights
+    # Compute number of nights (0 for same-day / day-trip)
     try:
         from datetime import date as dt
         d1 = dt.fromisoformat(start_date)
         d2 = dt.fromisoformat(end_date)
-        nights = max(1, (d2 - d1).days)
+        nights = max(0, (d2 - d1).days)
     except Exception:
         nights = 5
 
@@ -272,6 +272,7 @@ def _build_trip_plan_prompt(preferences: Dict[str, Any]) -> tuple[str, str]:
 
     long_trip = nights > 7
     num_weeks = -(-nights // 7)  # ceiling division
+    billing_days = max(1, nights)  # use 1 day minimum for food/shopping budgets on day trips
 
     # For multi-city trips, scale counts per city (min 2 each) and add city field to schema
     num_cities = len(destinations) if is_multi_city else 1
@@ -280,7 +281,7 @@ def _build_trip_plan_prompt(preferences: Dict[str, Any]) -> tuple[str, str]:
     activities_schema = f'{{"name":str,"category":str,"cost_per_person":num,"duration":str,"description":str,"best_time":str,"tags":[str],"booking_url":str{city_field}}}'
     food_spots_schema = f'{{"name":str,"cuisine":str,"avg_price":str,"neighborhood":str,"popular_dish":str,"why_popular":str,"review_summary":str,"booking_url":str{city_field}}}'
 
-    hotels_count   = max(4, 2 * num_cities)
+    hotels_count   = 0 if nights == 0 else max(4, 2 * num_cities)
     activities_count_short = max(6, 2 * num_cities)
     activities_count_long  = max(8, 3 * num_cities)
     food_count     = max(6, 2 * num_cities)
@@ -310,8 +311,9 @@ def _build_trip_plan_prompt(preferences: Dict[str, Any]) -> tuple[str, str]:
             '"evening":str,"meals":{"breakfast":str,"lunch":str,"dinner":str},"estimated_daily_cost":num}],'
             '"weekly_plan":[],'
         )
+        itinerary_days = max(1, nights)
         counts_line = (
-            f"Counts: EXACTLY {nights} itinerary days, {hotels_count} hotels, {activities_count_short} activities, {food_count} food_spots, "
+            f"Counts: EXACTLY {itinerary_days} itinerary day{'s' if itinerary_days != 1 else ''}, {hotels_count} hotels, {activities_count_short} activities, {food_count} food_spots, "
             "5 must_try_foods, 5 recommended_places. "
         )
         weekly_instructions = ""
@@ -321,6 +323,13 @@ def _build_trip_plan_prompt(preferences: Dict[str, Any]) -> tuple[str, str]:
         f'Each city must have roughly {hotels_count // num_cities} hotels, {activities_count_short // num_cities} activities, and {food_count // num_cities} food_spots. '
         'Set the "city" field on every hotel, activity, and food_spot to exactly the city name it belongs to.\n'
     ) if is_multi_city else ""
+
+    day_trip_instruction = (
+        "DAY TRIP (0 nights): The traveler is NOT staying overnight — this is a same-day visit. "
+        "Set hotels_total=0, hotels_range={\"min\":0,\"max\":0}, and output hotels=[]. "
+        "Itinerary must have EXACTLY 1 day packed with morning, afternoon, and evening activities. "
+        "Focus budget on activities, food, and local transport only.\n"
+    ) if nights == 0 else ""
 
     parts = [
         "You are an expert travel planner. Output STRICT JSON only - no markdown fences, no extra text.\n",
@@ -342,6 +351,7 @@ def _build_trip_plan_prompt(preferences: Dict[str, Any]) -> tuple[str, str]:
         '"must_try_foods":[{"type":str,"dish":str}],"weather_note":str,"currency_note":str}\n',
         counts_line,
         multi_city_instruction,
+        day_trip_instruction,
         "Real place names. All prices in user's currency. Be concise.\n",
         f"ACCOMMODATION TYPE: User prefers '{accommodation_type}'. Follow the rules and rate table below exactly.\n",
         "- 'hotel': Traditional hotels, boutique hotels, resorts only. type = 'Hotel', 'Boutique Hotel', 'Resort', etc.\n",
@@ -392,14 +402,14 @@ def _build_trip_plan_prompt(preferences: Dict[str, Any]) -> tuple[str, str]:
         f"stars field: set for hotels (3 or 4 or 5). Set to 0 for Airbnb and hostels.\n",
         f"FOOD BUDGET RULES (food priority = {food_quality}, rank #{food_rank}):\n",
         f"- Base food rate scales with priority:\n",
-        f"  HIGH  priority: ~{nights * group_size * 85} {currency} target "
+        f"  HIGH  priority: ~{billing_days * group_size * 85} {currency} target "
         f"(≈85/person/day — nicer restaurants, multi-course meals, wine, desserts).\n",
-        f"  MEDIUM priority: ~{nights * group_size * 60} {currency} target "
+        f"  MEDIUM priority: ~{billing_days * group_size * 60} {currency} target "
         f"(≈60/person/day — mix of sit-down and casual).\n",
-        f"  LOW   priority: minimum {nights * group_size * 45} {currency} "
+        f"  LOW   priority: minimum {billing_days * group_size * 45} {currency} "
         f"(≈45/person/day floor — mostly casual and street food).\n",
         f"- Use the target matching food priority ({food_quality}) as food_total. "
-        f"Never go below the LOW floor of {nights * group_size * 45} {currency}.\n",
+        f"Never go below the LOW floor of {billing_days * group_size * 45} {currency}.\n",
         f"ACTIVITIES BUDGET (activity priority = {activity_quality}, rank #{activity_rank}):\n",
         f"- {activity_quality} priority: "
         + ("plan premium experiences, guided tours, entrance fees to top attractions — allocate generously.\n" if activity_quality == "HIGH"
@@ -410,10 +420,10 @@ def _build_trip_plan_prompt(preferences: Dict[str, Any]) -> tuple[str, str]:
         f"SHOPPING & MISC (shopping priority = {shopping_quality}, rank #{shopping_rank}):\n",
         f"- shopping_misc covers: Uber/taxi, metro/bus, coffee, snacks, tips, souvenirs, SIM cards, pharmacy, laundry.\n",
         f"- {shopping_quality} priority target: "
-        + (f"{nights * group_size * 50}–{nights * group_size * 80} {currency} (generous shopping + souvenirs).\n" if shopping_quality == "HIGH"
-           else f"{nights * group_size * 30}–{nights * group_size * 50} {currency} (moderate incidentals).\n" if shopping_quality == "MEDIUM"
-           else f"{nights * group_size * 20}–{nights * group_size * 35} {currency} (essentials only).\n"),
-        f"- shopping_misc_total must be at least {nights * group_size * 20} {currency}. Never set to 0.\n",
+        + (f"{billing_days * group_size * 50}–{billing_days * group_size * 80} {currency} (generous shopping + souvenirs).\n" if shopping_quality == "HIGH"
+           else f"{billing_days * group_size * 30}–{billing_days * group_size * 50} {currency} (moderate incidentals).\n" if shopping_quality == "MEDIUM"
+           else f"{billing_days * group_size * 20}–{billing_days * group_size * 35} {currency} (essentials only).\n"),
+        f"- shopping_misc_total must be at least {billing_days * group_size * 20} {currency}. Never set to 0.\n",
         f"REMAINING BUDGET RULE: after setting all category values from the rules above, "
         f"if the sum is below the effective budget ({effective_total} {currency}), "
         f"allocate the surplus to the highest-ranked category (rank #{accom_rank if accom_rank < food_rank else food_rank} "
@@ -437,7 +447,7 @@ def _build_trip_plan_prompt(preferences: Dict[str, Any]) -> tuple[str, str]:
         "IMPORTANT: These are TYPICAL economy fares, NOT the absolute cheapest flash sales. ",
         "Pick a realistic midpoint for the specific city pair — do NOT anchor to the low end of the range.\n",
         "Set: flight_low_pp = lower quarter of range for specific cities, flight_high_pp = upper quarter.\n",
-        f"STEP 2 — local transport at destination for ONE person: ~10–20/person/day × {nights} nights. ",
+        f"STEP 2 — local transport at destination for ONE person: ~10–20/person/day × {billing_days} day{'s' if billing_days != 1 else ''}. ",
         "Add airport transfer if needed (~15–40 each way). Set: local_pp = total local per person.\n",
         f"STEP 3 — arithmetic (all per person):\n",
         "  transport_pp_low  = flight_low_pp  + local_pp\n",
@@ -460,8 +470,8 @@ def _build_trip_plan_prompt(preferences: Dict[str, Any]) -> tuple[str, str]:
         "  ✓ grand_total = hotels + activities + food + transport_total + shopping\n",
         f"OWN_CAR override: international.min/max = round-trip fuel for all {group_size} travelers. ",
         "Fuel ~0.14–0.18/km. international.note = 'Estimated X km round-trip; fuel and tolls only.'\n",
-        f"CAR_RENTAL override: international.min = economy ~45–65/day × {nights} days + low fuel (group total). ",
-        f"international.max = mid-size ~80–120/day × {nights} days + high fuel (group total).\n",
+        f"CAR_RENTAL override: international.min = economy ~45–65/day × {billing_days} day{'s' if billing_days != 1 else ''} + low fuel (group total). ",
+        f"international.max = mid-size ~80–120/day × {billing_days} day{'s' if billing_days != 1 else ''} + high fuel (group total).\n",
         "BUS_TRAIN override: international.min/max = total round-trip ticket cost for all travelers.\n",
         "Connecting flights are typically 25–45% cheaper than direct; note this in international.note.\n",
         "- grand_total = hotels_total + activities_total + food_total + transport_total + shopping_misc_total. ",
@@ -477,7 +487,7 @@ def _build_trip_plan_prompt(preferences: Dict[str, Any]) -> tuple[str, str]:
 
     user_input = (
         f"DESTINATION: {destination}\n"
-        f"TRAVEL DATES: {start_date} to {end_date} ({nights} nights)\n"
+        f"TRAVEL DATES: {start_date} to {end_date} ({nights} night{'s' if nights != 1 else ''}{' — single-day trip, no overnight stays' if nights == 0 else ''})\n"
         f"BUDGET (as entered): {budget} {currency} {'per person' if budget_type == 'per_person' else 'total for the group'}\n"
         f"EFFECTIVE TOTAL BUDGET: {effective_total:.2f} {currency} (for all {group_size} travelers)\n"
         f"PER-PERSON BUDGET: {per_person:.2f} {currency}\n"

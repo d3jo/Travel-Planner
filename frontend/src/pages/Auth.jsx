@@ -50,7 +50,8 @@ export default function Auth() {
 
   const inputStyle = {
     width: "100%",
-    padding: "10px 14px",
+    padding: "12px 14px",
+    minHeight: 44,
     borderRadius: 10,
     border: "1px solid var(--border-col)",
     background: "var(--bg-card)",
