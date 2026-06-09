@@ -56,15 +56,19 @@ export default function TripPlan() {
   const { token } = useParams();
   const isSharedView = !!token;
 
-  // Restore plan from sessionStorage if location state was lost during auth redirect
-  const locPlan = loc.state?.plan ?? (() => {
+  // Restore plan from sessionStorage if location state was lost during auth redirect.
+  // useState initialiser runs only once on mount, preventing re-renders from
+  // recomputing null after the first render already consumed the sessionStorage item.
+  const [locPlan] = useState(() => {
+    if (loc.state?.plan) return loc.state.plan;
     try { const s = sessionStorage.getItem("pendingPlan"); if (s) { sessionStorage.removeItem("pendingPlan"); return JSON.parse(s); } } catch { /* ignore */ }
     return null;
-  })();
-  const locPrefs = loc.state?.preferences ?? (() => {
+  });
+  const [locPrefs] = useState(() => {
+    if (loc.state?.preferences) return loc.state.preferences;
     try { const s = sessionStorage.getItem("pendingPrefs"); if (s) { sessionStorage.removeItem("pendingPrefs"); return JSON.parse(s); } } catch { /* ignore */ }
     return null;
-  })();
+  });
 
   const [sharedPlan, setSharedPlan] = useState(null);
   const [sharedPrefs, setSharedPrefs] = useState(null);

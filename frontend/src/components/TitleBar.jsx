@@ -2,13 +2,14 @@ import closeIcon from "../assets/close-icon.png";
 import shrinkIcon from "../assets/shrink-icon.png";
 import { useTheme } from "../contexts/ThemeContext";
 import { useAuth } from "../contexts/AuthContext";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useIsMobile } from "../hooks/useIsMobile";
 
 export default function TitleBar() {
   const { isDark, toggle } = useTheme();
   const { isLoggedIn, user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const isMobile = useIsMobile();
   const hasElectronWindowControls = typeof window !== "undefined" && Boolean(window.electron);
 
@@ -52,7 +53,16 @@ export default function TitleBar() {
               {user?.username?.slice(0, 1).toUpperCase() || "U"}
             </button>
           ) : (
-            <button type="button" onClick={() => navigate("/auth")} style={{
+            <button type="button" onClick={() => {
+              // If user is on /plan, preserve plan+prefs so they survive the auth redirect
+              if (location.pathname === "/plan") {
+                try {
+                  if (location.state?.plan)        sessionStorage.setItem("pendingPlan",  JSON.stringify(location.state.plan));
+                  if (location.state?.preferences) sessionStorage.setItem("pendingPrefs", JSON.stringify(location.state.preferences));
+                } catch { /* ignore quota errors */ }
+              }
+              navigate("/auth", { state: { returnTo: location.pathname } });
+            }} style={{
               ...styles.authBtnOutline,
               padding: isMobile ? "6px 14px" : "6px 18px",
               fontSize: isMobile ? 13 : 14,
