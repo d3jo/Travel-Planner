@@ -136,3 +136,52 @@ Travel-Planner/
 | Auth | JWT (python-jose), bcrypt |
 | Database | SQLite via SQLAlchemy |
 | Styling | CSS variables, dark/light theme |
+
+---
+
+## How This Was Built — Vibe Coding with Subagents
+
+This project was built using **vibe coding**: describing features in plain English and letting AI handle the implementation end-to-end — design, code, tests, and commits. No hand-written boilerplate, no copy-pasting from docs.
+
+### What is Vibe Coding?
+
+Instead of writing code manually, every feature starts as a conversation:
+
+1. **Describe the idea** — e.g. _"let users pick multiple transport modes so they can fly and rent a car"_
+2. **Brainstorm** — the AI asks clarifying questions and proposes 2–3 approaches with trade-offs
+3. **Approve a design** — one sentence approval ("option A") kicks off the implementation
+4. **Subagent execution** — a fleet of specialized AI agents implements it, reviews it, and commits it
+
+The human's job is product thinking — deciding *what* to build, approving designs, and giving feedback. The AI's job is *everything else*.
+
+### What Are Subagents?
+
+A **subagent** is a fresh Claude instance dispatched with a precise, isolated task. It has no memory of the conversation history — you give it exactly the context it needs and nothing more. This prevents context pollution and keeps each agent focused.
+
+For every feature task, three subagents run in sequence:
+
+| Agent | Role |
+|-------|------|
+| **Implementer** | Reads the spec, writes tests first (TDD), implements the code, self-reviews, commits |
+| **Spec Reviewer** | Checks the implementation against the original spec — flags missing requirements or unasked-for extras |
+| **Code Quality Reviewer** | Reviews for correctness, readability, edge cases, and React/Python best practices |
+
+If either reviewer finds issues, the implementer subagent is re-dispatched to fix them — and the reviewer checks again. Nothing moves forward until both reviews pass.
+
+### Example: Multi-Select Transport Modes
+
+When the request came in — _"sometimes people take a flight and rent a car, make it multi-select"_ — here's what happened:
+
+1. Brainstormed free-multi-select vs. primary+add-ons approach
+2. Wrote an implementation plan covering all 4 layers (UI state, API payload, backend model, LLM prompt)
+3. Dispatched **14 subagents** across 4 tasks (implementer + spec reviewer + quality reviewer per task, plus one fix agent for a `useMemo` edge case found in review)
+4. Every task committed and reviewed before the next one started
+
+The result: combined transport labels in the budget breakdown, AI that prices flight+car_rental as "intercity flight + local rental at destination" (not two separate trips), and a UI that prevents deselecting the last mode.
+
+### Why Subagents Beat Manual Coding Here
+
+- **Fresh context per task** — no confusion from earlier decisions bleeding into later ones
+- **Two review gates** — spec compliance catches over/under-building; code quality catches bugs
+- **TDD by default** — implementer agents write failing tests first, then make them pass
+- **Parallel-safe** — each agent only touches the files its task requires
