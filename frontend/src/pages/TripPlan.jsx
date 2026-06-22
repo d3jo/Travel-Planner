@@ -1177,7 +1177,7 @@ function budgetMathNote(key, value, currency, nights, groupSize) {
   }
 }
 
-function BudgetRow({ item, total, currency, nights, groupSize, perPersonMode, transportMode }) {
+function BudgetRow({ item, total, currency, nights, groupSize, perPersonMode, transportModes = ["flight"] }) {
   const [hovered, setHovered] = useState(false);
   const pct = item.pct ?? Math.round((item.value / total) * 100);
   const perPersonVal = Math.round(item.value / groupSize);
@@ -1258,10 +1258,21 @@ function BudgetRow({ item, total, currency, nights, groupSize, perPersonMode, tr
           {bd.international?.min != null && (
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.78rem", color: "var(--text-muted)" }}>
               <span>
-                {transportMode === "own_car" ? "⛽ Fuel & tolls" :
-                 transportMode === "car_rental" ? "🚗 Rental + fuel" :
-                 transportMode === "bus_train" ? "🚌 Bus / Train" :
-                 "✈️ Flights"}{perPersonMode ? " (per person)" : " (total)"}
+                {(() => {
+                  const primary = transportModes[0] ?? "flight";
+                  const primaryLabel =
+                    primary === "own_car"    ? "⛽ Fuel & tolls" :
+                    primary === "car_rental" ? "🚗 Rental + fuel" :
+                    primary === "bus_train"  ? "🚌 Bus / Train"  :
+                    "✈️ Flights";
+                  const extras = transportModes.slice(1).map((m) =>
+                    m === "car_rental" ? "🚙 + Car Rental" :
+                    m === "bus_train"  ? "🚌 + Local Transit" :
+                    m === "own_car"    ? "🚗 + Own Car" :
+                    "✈️ + Flight"
+                  );
+                  return [primaryLabel, ...extras].join(" ");
+                })()}{perPersonMode ? " (per person)" : " (total)"}
               </span>
               <span>{currency} {bd.international.min.toLocaleString()} – {bd.international.max.toLocaleString()}</span>
             </div>
@@ -1481,7 +1492,7 @@ function TabBudget({ budget, prefs }) {
         </div>
 
         {items.map((item) => (
-          <BudgetRow key={item.key} item={item} total={total} currency={prefs?.currency} nights={nights} groupSize={groupSize} perPersonMode={perPersonMode} transportMode={prefs?.transport_mode} />
+          <BudgetRow key={item.key} item={item} total={total} currency={prefs?.currency} nights={nights} groupSize={groupSize} perPersonMode={perPersonMode} transportModes={prefs?.transport_modes ?? [prefs?.transport_mode ?? "flight"]} />
         ))}
 
         {budget.savings_tip && (

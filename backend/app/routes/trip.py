@@ -27,9 +27,18 @@ class TripPreferences(BaseModel):
     trip_type: str = "solo"
     group_size: int = 1
     budget_type: str = "total"
+    transport_modes: List[str] = Field(default_factory=lambda: ["flight"])
     transport_mode: str = "flight"
     accommodation_type: str = "hotel"
     additional_notes: Optional[str] = None
+
+    def model_post_init(self, __context: object) -> None:
+        # If caller sent only the legacy transport_mode string, promote it to list
+        if self.transport_mode != "flight" and self.transport_modes == ["flight"]:
+            self.transport_modes = [self.transport_mode]
+        # Always keep legacy field in sync with primary mode
+        if self.transport_modes:
+            self.transport_mode = self.transport_modes[0]
 
 
 class CityRecommendationsRequest(BaseModel):

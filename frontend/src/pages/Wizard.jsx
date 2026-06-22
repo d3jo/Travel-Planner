@@ -1322,7 +1322,7 @@ export default function Wizard() {
   const [budget, setBudget]       = useState("");
   const [budgetType, setBudgetType] = useState("total");
   const [currency, setCurrency]   = useState("CAD");
-  const [transportMode, setTransportMode] = useState("flight");
+  const [transportModes, setTransportModes] = useState(["flight"]);
   const [accommodationType, setAccommodationType] = useState("hotel");
   const [topBudgets, setTopBudgets] = useState(["hotels"]);
   const [topVibes, setTopVibes]   = useState([]);
@@ -1375,7 +1375,8 @@ const handleSubmit = () => {
     budget_priorities: [...topBudgets, ...BUDGET_ITEMS.map(p => p.id).filter(id => !topBudgets.includes(id))],
     activity_preferences: topVibes,
     trip_type: tripType, group_size: Number(groupSize),
-    transport_mode: transportMode,
+    transport_modes: transportModes,
+    transport_mode: transportModes[0] ?? "flight",
     accommodation_type: accommodationType,
     additional_notes: notes.trim() || null,
     ...(destinations.length > 1 && { destinations: destinations.map((d) => d.name) }),
@@ -1442,12 +1443,18 @@ const handleSubmit = () => {
     >
       {/* Atmospheric background clouds */}
       {[
-        { top: "5%",  left: "3%",   size: 110, dur: 8,   delay: 0   },
-        { top: "10%", right: "5%",  size: 90,  dur: 9.5, delay: 2.1 },
-        { top: "42%", left: "1%",   size: 80,  dur: 10,  delay: 1.2 },
-        { top: "62%", right: "3%",  size: 100, dur: 8.5, delay: 3.0 },
-        { top: "82%", left: "14%",  size: 70,  dur: 9,   delay: 0.6 },
-        { top: "28%", right: "12%", size: 60,  dur: 11,  delay: 1.7 },
+        { top: "3%",  left: "2%",    size: 110, dur: 8,    delay: 0   },
+        { top: "6%",  right: "4%",   size: 85,  dur: 9.5,  delay: 2.1 },
+        { top: "18%", left: "18%",   size: 65,  dur: 11,   delay: 1.4 },
+        { top: "22%", right: "14%",  size: 75,  dur: 10,   delay: 3.3 },
+        { top: "35%", left: "1%",    size: 90,  dur: 9,    delay: 0.7 },
+        { top: "40%", right: "2%",   size: 70,  dur: 10.5, delay: 1.9 },
+        { top: "52%", left: "22%",   size: 55,  dur: 8.5,  delay: 2.8 },
+        { top: "58%", right: "18%",  size: 80,  dur: 11.5, delay: 0.3 },
+        { top: "68%", left: "5%",    size: 95,  dur: 9.5,  delay: 1.6 },
+        { top: "72%", right: "6%",   size: 60,  dur: 8,    delay: 3.8 },
+        { top: "83%", left: "28%",   size: 70,  dur: 10,   delay: 0.9 },
+        { top: "88%", right: "22%",  size: 85,  dur: 9,    delay: 2.4 },
       ].map((c, i) => (
         <motion.div
           key={`bgcloud-${i}`}
@@ -1495,7 +1502,7 @@ const handleSubmit = () => {
                     budgetType={budgetType} setBudgetType={setBudgetType}
                     groupSize={groupSize} setGroupSize={setGroupSize}
                     currency={currency} setCurrency={setCurrency}
-                    transportMode={transportMode} setTransportMode={setTransportMode}
+                    transportModes={transportModes} setTransportModes={setTransportModes}
                     accommodationType={accommodationType} setAccommodationType={setAccommodationType}
                     tripType={tripType} setTripType={setTripType}
                   />
@@ -1623,7 +1630,7 @@ function StepDatesAndBudget({
   autoDistribute, setAutoDistribute, dayAssignments, setDayAssignments,
   dateRange, setDateRange, showCal, setShowCal, calMonth, setCalMonth,
   budget, setBudget, budgetType, setBudgetType, groupSize, setGroupSize, currency, setCurrency,
-  transportMode, setTransportMode, accommodationType, setAccommodationType, tripType, setTripType,
+  transportModes, setTransportModes, accommodationType, setAccommodationType, tripType, setTripType,
 }) {
   const isDarkMode = useIsDarkMode();
   const isMultiDestTrip = destinations.length > 1;
@@ -1714,7 +1721,7 @@ function StepDatesAndBudget({
     }
   };
 
-  const disabledModes = getDisabledModes(origin, destination);
+  const disabledModes = useMemo(() => getDisabledModes(origin, destination), [origin, destination]);
 
   const handleTripTypeSelect = (next) => {
     setTripType(next);
@@ -1723,8 +1730,12 @@ function StepDatesAndBudget({
 
   // Auto-switch to flight if current mode becomes disabled
   useEffect(() => {
-    if (disabledModes.has(transportMode)) setTransportMode("flight");
-  }, [disabledModes, transportMode, setTransportMode]);
+    setTransportModes((prev) => {
+      const filtered = prev.filter((m) => !disabledModes.has(m));
+      if (filtered.length === 0) return disabledModes.has("flight") ? ["bus_train"] : ["flight"];
+      return filtered.length === prev.length ? prev : filtered;
+    });
+  }, [disabledModes]);
   const inputBg     = isDarkMode ? "rgba(255,255,255,0.04)" : "rgba(168,207,223,0.12)";
   const panelBorder = isDarkMode ? "1px solid rgba(255,255,255,0.12)" : "1px solid rgba(168,207,223,0.35)";
 
@@ -1888,18 +1899,30 @@ function StepDatesAndBudget({
             <div style={styles.stepHint}>Select a location from the dropdown to confirm.</div>
           </div>
 
-          {/* Transport mode */}
+          {/* Transport mode — multi-select */}
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <div style={styles.stepTitle}>How are you getting there?</div>
+            <div style={{ fontSize: "0.74rem", color: "var(--text-muted)", marginTop: -4 }}>
+              Select all that apply — e.g. fly there and rent a car locally
+            </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 7 }}>
               {TRANSPORT_MODES.map(({ id, label, hint }) => {
-                const sel = transportMode === id;
+                const sel = transportModes.includes(id);
                 const disabled = disabledModes.has(id);
                 return (
                   <button
                     key={id}
                     type="button"
-                    onClick={() => !disabled && setTransportMode(id)}
+                    onClick={() => {
+                      if (disabled) return;
+                      setTransportModes((prev) => {
+                        if (prev.includes(id)) {
+                          if (prev.length === 1) return prev;
+                          return prev.filter((m) => m !== id);
+                        }
+                        return [...prev, id];
+                      });
+                    }}
                     disabled={disabled}
                     title={disabled ? "Not available for this route" : undefined}
                     style={{
@@ -1909,9 +1932,15 @@ function StepDatesAndBudget({
                       opacity: disabled ? 0.38 : 1,
                       background: sel ? "rgba(13,148,136,0.12)" : inputBg,
                       border: `1px solid ${sel ? "var(--cal-accent)" : panelBorder.replace("1px solid ", "")}`,
-                      transition: "all 0.15s",
+                      transition: "all 0.15s", position: "relative",
                     }}
                   >
+                    {sel && (
+                      <span style={{
+                        position: "absolute", top: 6, right: 8,
+                        fontSize: "0.65rem", color: "var(--cal-accent)", fontWeight: 900,
+                      }}>✓</span>
+                    )}
                     <span style={{ fontSize: "0.9rem", fontWeight: sel ? 700 : 500, color: sel ? "var(--cal-accent-fg)" : "var(--white)", fontFamily: '"Pixelify Sans", sans-serif' }}>
                       {label}
                     </span>

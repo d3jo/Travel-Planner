@@ -174,7 +174,8 @@ def _build_trip_plan_prompt(preferences: Dict[str, Any]) -> tuple[str, str]:
     group_size = preferences.get("group_size", 1)
     budget_type = preferences.get("budget_type", "total")
     additional_notes = preferences.get("additional_notes", "")
-    transport_mode = preferences.get("transport_mode", "flight")
+    transport_modes = preferences.get("transport_modes") or [preferences.get("transport_mode", "flight")]
+    transport_mode = transport_modes[0]  # primary mode — used for cabin_rule logic below
     accommodation_type = preferences.get("accommodation_type", "hotel")
 
     effective_total = budget * group_size if budget_type == "per_person" else budget
@@ -429,54 +430,77 @@ def _build_trip_plan_prompt(preferences: Dict[str, Any]) -> tuple[str, str]:
         f"allocate the surplus to the highest-ranked category (rank #{accom_rank if accom_rank < food_rank else food_rank} "
         f"= {'accommodation' if accom_rank <= food_rank else 'food'}) by upgrading quality further.\n",
         "If grand_total exceeds effective budget, set within_budget=false. Do NOT compress floors to force within_budget=true.\n",
-        "TRANSPORT BUDGET RULES — use explicit arithmetic, never invent totals:\n",
-        f"STEP 1 — determine per-person flight cost (round-trip economy) based on ACTUAL origin '{origin}' and destination '{destination}'.\n",
-        "Use ONLY the origin and destination cities — do NOT infer home country from currency.\n",
-        "Route reference table (per-person round-trip economy, taxes included, booked 4–8 weeks out):\n",
-        "  Intra-East-Asia ≤3h (Seoul/Tokyo/Osaka/Taipei/HK to each other): CAD 300–600. ",
-        "  Example confirmed fares: Seoul↔Osaka ~CAD 300–450, Seoul↔Tokyo ~CAD 320–500, Tokyo↔Taipei ~CAD 350–550.\n",
-        "  Intra-SE-Asia ≤4h (Bangkok/Singapore/KL/Manila/Bali to each other): CAD 250–550.\n",
-        "  Asia cross-regional 4–8h (Korea/Japan↔SE Asia, Japan↔India): CAD 600–1200.\n",
-        "  Asia↔Oceania 8–10h (Tokyo/Seoul↔Sydney/Auckland): CAD 1000–1800.\n",
-        "  North America↔East Asia 10–14h (Vancouver/Toronto↔Tokyo/Seoul/Beijing): CAD 1400–2500. ",
-        "  Example confirmed fares: Toronto↔Tokyo ~CAD 1600–2200, Vancouver↔Seoul ~CAD 1400–2000.\n",
-        "  North America↔Europe 7–10h (Toronto/NYC↔London/Paris/Frankfurt): CAD 900–1900.\n",
-        "  North America↔SE Asia/South Asia 14h+ (Toronto↔Bangkok/Singapore/Mumbai): CAD 1600–3200.\n",
-        "  Intra-Europe (budget carriers, e.g. Ryanair/easyJet): CAD 150–500.\n",
-        "  Europe↔Middle East/Africa 4–8h: CAD 600–1400.\n",
-        "IMPORTANT: These are TYPICAL economy fares, NOT the absolute cheapest flash sales. ",
-        "Pick a realistic midpoint for the specific city pair — do NOT anchor to the low end of the range.\n",
-        "Set: flight_low_pp = lower quarter of range for specific cities, flight_high_pp = upper quarter.\n",
-        f"STEP 2 — local transport at destination for ONE person: ~10–20/person/day × {billing_days} day{'s' if billing_days != 1 else ''}. ",
-        "Add airport transfer if needed (~15–40 each way). Set: local_pp = total local per person.\n",
-        f"STEP 3 — arithmetic (all per person):\n",
-        "  transport_pp_low  = flight_low_pp  + local_pp\n",
-        "  transport_pp_high = flight_high_pp + local_pp\n",
-        f"STEP 4 — scale to group:\n",
-        f"  international.min = flight_low_pp  × {group_size}\n",
-        f"  international.max = flight_high_pp × {group_size}\n",
-        f"  local             = local_pp × {group_size}\n",
-        f"  transport_range.min = transport_pp_low  × {group_size}\n",
-        f"  transport_range.max = transport_pp_high × {group_size}\n",
-        f"  transport_total = round((transport_pp_low + transport_pp_high) / 2) × {group_size}\n",
-        f"  transportation_options[0].priceEstimate.min = international.min = flight_low_pp × {group_size}\n",
-        f"  transportation_options[0].priceEstimate.max = international.max = flight_high_pp × {group_size}\n",
-        "CONSISTENCY CHECK before outputting — verify all of these:\n",
-        "  ✓ international.min = flight_low_pp × group_size (not a guess)\n",
-        "  ✓ transport_range.min = international.min + local\n",
-        "  ✓ transport_total = midpoint of range\n",
-        f"  ✓ priceEstimate.min = international.min (group total, NOT per-person; frontend divides by group_size={group_size})\n",
-        f"  ✓ priceEstimate.max = international.max (group total, NOT per-person; frontend divides by group_size={group_size})\n",
-        "  ✓ grand_total = hotels + activities + food + transport_total + shopping\n",
-        f"OWN_CAR override: international.min/max = round-trip fuel for all {group_size} travelers. ",
-        "Fuel ~0.14–0.18/km. international.note = 'Estimated X km round-trip; fuel and tolls only.'\n",
-        f"CAR_RENTAL override: international.min = economy ~45–65/day × {billing_days} day{'s' if billing_days != 1 else ''} + low fuel (group total). ",
-        f"international.max = mid-size ~80–120/day × {billing_days} day{'s' if billing_days != 1 else ''} + high fuel (group total).\n",
-        "BUS_TRAIN override: international.min/max = total round-trip ticket cost for all travelers.\n",
-        "Connecting flights are typically 25–45% cheaper than direct; note this in international.note.\n",
-        "- grand_total = hotels_total + activities_total + food_total + transport_total + shopping_misc_total. ",
-        "transport_total includes ALL travel + local for ALL travelers.\n",
-        f"CABIN (flights only): {cabin_rule} Provide 2-3 options from recommended down to economy. ",
+        f"TRANSPORT BUDGET RULES — use explicit arithmetic, never invent totals:\n",
+        f"SELECTED TRANSPORT MODES: {', '.join(transport_modes)}\n",
+        "COMBINATION SEMANTICS:\n",
+        f"  - If 'flight' is in the list: flight covers the intercity leg to {destination}.\n",
+        f"  - If 'car_rental' is ALSO in the list alongside 'flight': it means a rental car at {destination} for local use (NOT driving there). Price it as a local rental.\n",
+        f"  - If 'bus_train' is ALSO in the list alongside 'flight': it means local rail/bus passes at {destination}, not an intercity train.\n",
+        "  - If 'own_car' is the only mode: the user drives their own car the entire route.\n",
+        "  - If 'car_rental' is the only mode: the user drives a rented car the entire intercity route.\n",
+        "  - If 'bus_train' is the only mode: the user takes trains/buses for the entire journey.\n",
+        f"STEP 1 — intercity transport cost (primary mode = {transport_mode}):\n",
+        *(
+            [
+                f"  FLIGHT: per-person round-trip economy based on ACTUAL origin '{origin}' and destination '{destination}'.\n",
+                "  Route reference table (per-person round-trip economy, taxes included, booked 4-8 weeks out):\n",
+                "    Intra-East-Asia <=3h (Seoul/Tokyo/Osaka/Taipei/HK to each other): CAD 300-600.\n",
+                "    Intra-SE-Asia <=4h (Bangkok/Singapore/KL/Manila/Bali to each other): CAD 250-550.\n",
+                "    Asia cross-regional 4-8h (Korea/Japan to SE Asia, Japan to India): CAD 600-1200.\n",
+                "    Asia to Oceania 8-10h (Tokyo/Seoul to Sydney/Auckland): CAD 1000-1800.\n",
+                "    North America to East Asia 10-14h (Vancouver/Toronto to Tokyo/Seoul/Beijing): CAD 1400-2500.\n",
+                "    North America to Europe 7-10h (Toronto/NYC to London/Paris/Frankfurt): CAD 900-1900.\n",
+                "    North America to SE Asia/South Asia 14h+ (Toronto to Bangkok/Singapore/Mumbai): CAD 1600-3200.\n",
+                "    Intra-Europe (budget carriers): CAD 150-500.\n",
+                "    Europe to Middle East/Africa 4-8h: CAD 600-1400.\n",
+                "  IMPORTANT: Use realistic midpoint fares, not flash-sale lows.\n",
+                "  Set: flight_low_pp = lower quarter of range, flight_high_pp = upper quarter.\n",
+                f"  international.min = flight_low_pp x {group_size}  (group total)\n",
+                f"  international.max = flight_high_pp x {group_size} (group total)\n",
+            ] if transport_mode == "flight" else
+            [
+                f"  OWN_CAR: international.min/max = round-trip fuel for all {group_size} travelers. Fuel ~0.14-0.18/km.\n",
+                f"  international.note = 'Estimated X km round-trip; fuel and tolls only.'\n",
+            ] if transport_mode == "own_car" else
+            [
+                f"  CAR_RENTAL (intercity): international.min = economy ~45-65/day x {billing_days} day{'s' if billing_days != 1 else ''} + low fuel (group total).\n",
+                f"  international.max = mid-size ~80-120/day x {billing_days} day{'s' if billing_days != 1 else ''} + high fuel (group total).\n",
+            ] if transport_mode == "car_rental" else
+            [
+                f"  BUS_TRAIN: international.min/max = total round-trip ticket cost for all travelers.\n",
+            ]
+        ),
+        "STEP 2 — local transport at destination:\n",
+        *(
+            [
+                f"  'car_rental' selected as local mode: rental car at {destination} (NOT driving there).\n",
+                f"  Local rental: economy ~45-65/day x {billing_days} day{'s' if billing_days != 1 else ''} for the group. Add airport pick-up (~0-30 extra).\n",
+                "  Set local = rental_car_group_total (replaces standard 10-20/person/day estimate).\n",
+            ] if "car_rental" in transport_modes and transport_mode != "car_rental" else
+            [
+                f"  'bus_train' selected as local mode: local rail/bus passes at {destination}.\n",
+                f"  Local passes: ~15-35/person/day x {billing_days} day{'s' if billing_days != 1 else ''}. Set local = local_pp x {group_size}.\n",
+            ] if "bus_train" in transport_modes and transport_mode != "bus_train" else
+            [
+                f"  Standard local transport: ~10-20/person/day x {billing_days} day{'s' if billing_days != 1 else ''}. Add airport transfer if needed (~15-40 each way).\n",
+                f"  Set: local_pp = total local per person. local = local_pp x {group_size}.\n",
+            ]
+        ),
+        "STEP 3 — arithmetic:\n",
+        f"  transport_pp_low  = (international.min / {group_size}) + (local / {group_size})\n",
+        f"  transport_pp_high = (international.max / {group_size}) + (local / {group_size})\n",
+        "STEP 4 — scale to group:\n",
+        f"  transport_range.min = international.min + local\n",
+        f"  transport_range.max = international.max + local\n",
+        f"  transport_total = round((transport_range.min + transport_range.max) / 2)\n",
+        f"  transportation_options[0].priceEstimate.min = international.min\n",
+        f"  transportation_options[0].priceEstimate.max = international.max\n",
+        "CONSISTENCY CHECK before outputting:\n",
+        "  check: transport_range.min = international.min + local\n",
+        "  check: transport_total = midpoint of range\n",
+        f"  check: priceEstimate.min = international.min (group total; frontend divides by group_size={group_size})\n",
+        "  check: grand_total = hotels + activities + food + transport_total + shopping\n",
+        f"CABIN (flights only - applies when 'flight' is in transport modes): {cabin_rule} Provide 2-3 options from recommended down to economy. ",
         "priceEstimate.source='llm_fallback'. confidence=low|medium|high. ",
         "notes must include 'Round-trip estimate' and 'Prices vary by airline and booking date'.\n",
         f"savings_tip: Write ONE specific, practical money-saving tip as if you are a long-time local resident of {destination} - ",
@@ -495,7 +519,7 @@ def _build_trip_plan_prompt(preferences: Dict[str, Any]) -> tuple[str, str]:
         f"ACTIVITY PREFERENCES: {', '.join(activity_preferences)}\n"
         f"TRIP TYPE: {trip_type}\n"
         f"GROUP SIZE: {group_size} person(s)\n"
-        f"TRANSPORT MODE TO DESTINATION: {transport_mode} (from {origin} to {destination})\n"
+        f"TRANSPORT MODES: {', '.join(transport_modes)} (from {origin} to {destination})\n"
         f"ADDITIONAL NOTES: {additional_notes or 'None'}\n\n"
         "Generate a complete trip plan as JSON. Use EFFECTIVE TOTAL BUDGET for hotels/activities/food/shopping allocations. "
         "transport_total MUST be derived from the transport pricing rules (midpoint of international range + local), not from the budget percentage.\n"
