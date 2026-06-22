@@ -1281,6 +1281,7 @@ function StepBox({ children, onBack, backLabel = "← Back", onAltBack, altBackL
 
 // ─── Wizard ───────────────────────────────────────────────────────────────────
 export default function Wizard() {
+  const isDarkMode = useIsDarkMode();
   const [mapDone, setMapDone]         = useState(false);
   const [origin, setOrigin]           = useState("");
   const [destination, setDestination] = useState("");
@@ -1441,20 +1442,20 @@ const handleSubmit = () => {
     >
       {/* Atmospheric background clouds */}
       {[
-        { top: "5%",  left: "3%",   size: 72, dur: 8,   delay: 0   },
-        { top: "10%", right: "5%",  size: 58, dur: 9.5, delay: 2.1 },
-        { top: "42%", left: "1%",   size: 52, dur: 10,  delay: 1.2 },
-        { top: "62%", right: "3%",  size: 64, dur: 8.5, delay: 3.0 },
-        { top: "82%", left: "14%",  size: 44, dur: 9,   delay: 0.6 },
-        { top: "28%", right: "12%", size: 36, dur: 11,  delay: 1.7 },
+        { top: "5%",  left: "3%",   size: 110, dur: 8,   delay: 0   },
+        { top: "10%", right: "5%",  size: 90,  dur: 9.5, delay: 2.1 },
+        { top: "42%", left: "1%",   size: 80,  dur: 10,  delay: 1.2 },
+        { top: "62%", right: "3%",  size: 100, dur: 8.5, delay: 3.0 },
+        { top: "82%", left: "14%",  size: 70,  dur: 9,   delay: 0.6 },
+        { top: "28%", right: "12%", size: 60,  dur: 11,  delay: 1.7 },
       ].map((c, i) => (
         <motion.div
           key={`bgcloud-${i}`}
-          animate={{ y: [0, -14, 0], opacity: [0.04, 0.075, 0.04] }}
+          animate={{ y: [0, -14, 0], opacity: [0.18, 0.28, 0.18] }}
           transition={{ duration: c.dur, repeat: Infinity, delay: c.delay, ease: "easeInOut" }}
           style={{ position: "absolute", top: c.top, left: c.left, right: c.right, pointerEvents: "none", zIndex: 0 }}
         >
-          <CloudSVG size={c.size} color="rgba(13,148,136,1)" />
+          <CloudSVG size={c.size} color={isDarkMode ? "#3b82f6" : "#0d9488"} />
         </motion.div>
       ))}
       <div style={{ ...styles.content, position: "relative", zIndex: 1 }}>
@@ -2667,7 +2668,7 @@ const mapStyles = {
 const styles = {
   wrap: {
   display: "flex", flexDirection: "column", alignItems: "center",
-  height: "100vh",
+  height: "calc(100vh - 56px)",
   width: "100%",
   padding: "20px 16px max(env(safe-area-inset-bottom, 0px) + 32px, 64px)",
   boxSizing: "border-box",
