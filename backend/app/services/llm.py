@@ -4,7 +4,70 @@ import json
 import os
 from typing import Any, Dict, Optional
 
+import httpx as _httpx
 from openai import OpenAI
+
+# Fallback rates (USD → currency) used when Frankfurter API is unreachable
+_USD_FALLBACK_RATES: Dict[str, float] = {
+    "EUR": 0.92, "GBP": 0.79, "CAD": 1.37, "AUD": 1.53,
+    "JPY": 157.0, "KRW": 1350.0, "CNY": 7.25, "INR": 83.0,
+    "SGD": 1.34, "CHF": 0.89, "SEK": 10.6, "NZD": 1.65,
+    "THB": 35.0, "MXN": 17.0, "BRL": 5.0, "MYR": 4.7,
+    "IDR": 15900.0, "PHP": 56.0,
+}
+
+
+def _get_usd_rate(currency: str) -> float:
+    """Return units of `currency` per 1 USD via Frankfurter (ECB data, free, no key)."""
+    if currency == "USD":
+        return 1.0
+    try:
+        resp = _httpx.get(
+            "https://api.frankfurter.app/latest",
+            params={"from": "USD", "to": currency},
+            timeout=5.0,
+        )
+        resp.raise_for_status()
+        return float(resp.json()["rates"][currency])
+    except Exception:
+        return _USD_FALLBACK_RATES.get(currency, 1.0)
+
+
+def _convert_prices(plan: Dict[str, Any], rate: float) -> Dict[str, Any]:
+    """Multiply every numeric price field in plan by rate (USD → user currency)."""
+    if rate == 1.0:
+        return plan
+
+    def cv(v: Any) -> Any:
+        return round(v * rate) if isinstance(v, (int, float)) else v
+
+    bb = plan.get("budget_breakdown") or {}
+    for k in ("hotels_total", "activities_total", "food_total",
+              "transport_total", "shopping_misc_total", "grand_total"):
+        bb[k] = cv(bb.get(k, 0))
+    for k in ("hotels_range", "activities_range", "food_range",
+              "transport_range", "shopping_misc_range"):
+        rng = bb.get(k) or {}
+        rng["min"] = cv(rng.get("min", 0))
+        rng["max"] = cv(rng.get("max", 0))
+    tb = bb.get("transport_breakdown") or {}
+    intl = tb.get("international") or {}
+    intl["min"] = cv(intl.get("min", 0))
+    intl["max"] = cv(intl.get("max", 0))
+    tb["local"] = cv(tb.get("local", 0))
+
+    for h in plan.get("hotels") or []:
+        h["price_per_night"] = cv(h.get("price_per_night", 0))
+    for a in plan.get("activities") or []:
+        a["cost_per_person"] = cv(a.get("cost_per_person", 0))
+    for t in plan.get("transportation_options") or []:
+        pe = t.get("priceEstimate") or {}
+        pe["min"] = cv(pe.get("min", 0))
+        pe["max"] = cv(pe.get("max", 0))
+    for day in plan.get("itinerary") or []:
+        day["estimated_daily_cost"] = cv(day.get("estimated_daily_cost", 0))
+
+    return plan
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
@@ -376,7 +439,7 @@ def _build_trip_plan_prompt(preferences: Dict[str, Any]) -> tuple[str, str]:
         "  | Hostel private | 15–30/night      | 30–65/night       | 55–100/night        |\n",
         "  | Hostel dorm    | 6–15/night       | 15–35/night       | 30–60/night         |\n",
         "The priority-based quality rules below determine where within each cell to pick.\n",
-        "food_spots.avg_price: '~CAD 18-30/person'. popular_dish: one dish. why_popular: 1-2 sentences. review_summary: one line.\n",
+        "food_spots.avg_price: '~USD 18-30/person'. popular_dish: one dish. why_popular: 1-2 sentences. review_summary: one line.\n",
         "weather_note: 2 sentences, temp C/F, what to pack.\n",
         weekly_instructions,
         "CORE RULE: Plan at REALISTIC prices first. NEVER fabricate low prices to fit the budget — "
@@ -444,15 +507,15 @@ def _build_trip_plan_prompt(preferences: Dict[str, Any]) -> tuple[str, str]:
             [
                 f"  FLIGHT: per-person round-trip economy based on ACTUAL origin '{origin}' and destination '{destination}'.\n",
                 "  Route reference table (per-person round-trip economy, taxes included, booked 4-8 weeks out):\n",
-                "    Intra-East-Asia <=3h (Seoul/Tokyo/Osaka/Taipei/HK to each other): CAD 300-600.\n",
-                "    Intra-SE-Asia <=4h (Bangkok/Singapore/KL/Manila/Bali to each other): CAD 250-550.\n",
-                "    Asia cross-regional 4-8h (Korea/Japan to SE Asia, Japan to India): CAD 600-1200.\n",
-                "    Asia to Oceania 8-10h (Tokyo/Seoul to Sydney/Auckland): CAD 1000-1800.\n",
-                "    North America to East Asia 10-14h (Vancouver/Toronto to Tokyo/Seoul/Beijing): CAD 1400-2500.\n",
-                "    North America to Europe 7-10h (Toronto/NYC to London/Paris/Frankfurt): CAD 900-1900.\n",
-                "    North America to SE Asia/South Asia 14h+ (Toronto to Bangkok/Singapore/Mumbai): CAD 1600-3200.\n",
-                "    Intra-Europe (budget carriers): CAD 150-500.\n",
-                "    Europe to Middle East/Africa 4-8h: CAD 600-1400.\n",
+                "    Intra-East-Asia <=3h (Seoul/Tokyo/Osaka/Taipei/HK to each other): USD 220-440.\n",
+                "    Intra-SE-Asia <=4h (Bangkok/Singapore/KL/Manila/Bali to each other): USD 180-400.\n",
+                "    Asia cross-regional 4-8h (Korea/Japan to SE Asia, Japan to India): USD 440-880.\n",
+                "    Asia to Oceania 8-10h (Tokyo/Seoul to Sydney/Auckland): USD 730-1315.\n",
+                "    North America to East Asia 10-14h (Vancouver/Toronto to Tokyo/Seoul/Beijing): USD 1020-1825.\n",
+                "    North America to Europe 7-10h (Toronto/NYC to London/Paris/Frankfurt): USD 660-1385.\n",
+                "    North America to SE Asia/South Asia 14h+ (Toronto to Bangkok/Singapore/Mumbai): USD 1170-2335.\n",
+                "    Intra-Europe (budget carriers): USD 110-365.\n",
+                "    Europe to Middle East/Africa 4-8h: USD 440-1020.\n",
                 "  IMPORTANT: Use realistic midpoint fares, not flash-sale lows.\n",
                 "  Set: flight_low_pp = lower quarter of range, flight_high_pp = upper quarter.\n",
                 f"  international.min = flight_low_pp x {group_size}  (group total)\n",
@@ -536,7 +599,17 @@ def _build_trip_plan_prompt(preferences: Dict[str, Any]) -> tuple[str, str]:
 
 def iter_trip_plan_events(preferences: Dict[str, Any]):
     """Streaming generator. Yields {"type":"delta","text":str} chunks, then {"type":"done","result":dict}."""
-    instructions, user_input = _build_trip_plan_prompt(preferences)
+    currency = preferences.get("currency", "USD")
+    rate = _get_usd_rate(currency)  # units of user's currency per 1 USD
+
+    # Normalise to USD so the LLM always works with familiar price magnitudes,
+    # then convert all price fields back to the user's currency after generation.
+    usd_prefs = dict(preferences)
+    if rate != 1.0:
+        usd_prefs["budget"] = preferences.get("budget", 0) / rate
+        usd_prefs["currency"] = "USD"
+
+    instructions, user_input = _build_trip_plan_prompt(usd_prefs)
     client = _get_client()
 
     _MODELS_NO_TEMP = ("o1", "o3", "o4", "gpt-5")
@@ -560,6 +633,16 @@ def iter_trip_plan_events(preferences: Dict[str, Any]):
                     yield {"type": "delta", "text": delta}
 
     result = _parse_trip_plan_payload(buffer)
+
+    # Convert all USD price fields back to the user's chosen currency
+    if rate != 1.0:
+        result = _convert_prices(result, rate)
+        for opt in result.get("transportation_options") or []:
+            pe = opt.get("priceEstimate") or {}
+            pe["currency"] = currency
+
+    result["_currency"] = currency
+    result["_exchange_rate"] = rate
     yield {"type": "done", "result": result}
 
 
